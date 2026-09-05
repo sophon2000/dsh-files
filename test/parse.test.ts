@@ -211,7 +211,7 @@ test('windowLines truncates over-long lines with an explicit marker', () => {
   const w = windowLines('short\n' + 'x'.repeat(50), 1, 10, 20)
   assert.equal(w.lines[0].text, 'short') // 5 chars, fits
   // 剩余预算 15 字符：超长行截断到 15 字符 + 标记。
-  assert.match(w.lines[1].text, /^x{15}…\[truncated, 50 chars\]$/)
+  assert.match(w.lines[1].text, /^x{15}…\[已截断，共 50 字符\]$/)
 })
 
 test('windowLines enforces a total character budget across the window', () => {
@@ -221,7 +221,7 @@ test('windowLines enforces a total character budget across the window', () => {
   assert.equal(w.lines.length, 3)
   assert.equal(w.lines[0].text, 'line-one-12')
   assert.equal(w.lines[1].text, 'line-two-12')
-  assert.match(w.lines[2].text, /^lin…\[truncated, 13 chars\]$/)
+  assert.match(w.lines[2].text, /^lin…\[已截断，共 13 字符\]$/)
   assert.equal(w.totalLines, 3)
 })
 
@@ -229,8 +229,8 @@ test('windowLines reports hidden lines when the budget cuts the window', () => {
   const w = windowLines('a\nb\nc\nd\ne', 1, 10, 3)
   // 预算 3：a/b/c 各 1 字符用尽；第 4 行超预算 → 截断标记行 + 隐藏 1 行。
   assert.equal(w.lines.length, 4)
-  assert.match(w.lines[3].text, /truncated, 1 chars/)
-  assert.match(w.lines[3].text, /1 more line/)
+  assert.match(w.lines[3].text, /已截断，共 1 字符/)
+  assert.match(w.lines[3].text, /还有 1 行未显示/)
 })
 
 test('empty text decodes as an empty document', () => {

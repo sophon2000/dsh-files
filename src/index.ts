@@ -50,7 +50,8 @@ export function apply(ctx: any, config: DocsConfig): void {
     ['readLimit', config.readLimit],
     ['sheetRowLimit', config.sheetRowLimit],
     ['maxSheets', config.maxSheets],
-    ['maxOutputChars', config.maxOutputChars]
+    ['maxOutputChars', config.maxOutputChars],
+    ['readTimeoutMs', config.readTimeoutMs]
   ] as const) {
     if (!Number.isInteger(value) || value < 1) {
       throw new Error(`dsh-files: ${label} must be a positive integer`)

@@ -15,7 +15,8 @@ import { windowLines } from './parse/text.ts'
 /**
  * 单次 read_document 窗口的字符预算。按格式分级：
  * - text：需要逐行精确定位（代码/配置），用满基础预算。
- * - xlsx：按 sheet/row 天然受限，用满基础预算。
+ * - xlsx：结构化表格行多列宽也会撑爆上下文，给 3/4，配合截断标记
+ *   引导模型 offset 翻页增量取。
  * - pdf/docx：叙述性流式文本，模型通常只需关键段落，一次塞满会把上下文
  *   稀释并推高 token 成本；给基础预算的一半，配合 windowLines 的截断标记
  *   引导模型用 offset/limit 翻页增量获取。

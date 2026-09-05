@@ -1,4 +1,4 @@
-// dsh-files 0.6.0 client face — one button, no pipeline.
+// dsh-files 0.5.1 client face — one button, no pipeline.
 //
 // A single folder-picker button injected into `conversation.input.left`, i.e.
 // right next to the host's native paperclip. Files flattened from the picked
@@ -63,38 +63,43 @@ function dragContainsDirectory(dt: DataTransfer | null): boolean {
   return false
 }
 
-/** Flatten a DataTransfer into concrete files; directories recurse. */
+/**
+ * Flatten a DataTransfer into concrete files; directories recurse.
+ *
+ * Chrome 的 drop 保护模式：事件处理同步栈结束后，DataTransferItem 的
+ * webkitGetAsEntry()/getAsFile() 一律返回 null。因此必须在 drop 事件栈内
+ * 一次性把所有 item 快照成 FileSystemEntry/File 引用，之后再异步展开——
+ * 否则第二个起的文件/目录会被静默丢弃。
+ */
 async function collectFiles(dt: DataTransfer | null): Promise<File[]> {
   const files: File[] = []
   if (dt === null) return files
-  const got = new Set<string>()
-  const visit = async (item: DataTransferItem | FileSystemEntry): Promise<void> => {
-    // DataTransferItem (the drag list) and FileSystemEntry (directory
-    // recursion) are two shapes: the former uses webkitGetAsEntry/getAsFile,
-    // the latter isFile/isDirectory/createReader directly.
-    if ('webkitGetAsEntry' in item) {
+  const roots: Array<FileSystemEntry | File | null> = Array.from(dt.items ?? [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => {
       const entry = item.webkitGetAsEntry?.()
-      if (entry === undefined || entry === null) {
-        const file = item.getAsFile()
-        if (file !== null) files.push(file)
-        return
-      }
-      await visit(entry)
+      return entry !== undefined && entry !== null ? entry : item.getAsFile()
+    })
+  const got = new Set<string>()
+  const addFile = (file: File): void => {
+    // Dedup key prefers webkitRelativePath (directory prefix included):
+    // same-named files in different directories must all survive.
+    const key = file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name
+    if (!got.has(key)) {
+      got.add(key)
+      files.push(file)
+    }
+  }
+  const visit = async (node: FileSystemEntry | File): Promise<void> => {
+    if (node instanceof File) {
+      addFile(node)
       return
     }
-    if (item.isFile) {
-      const file = await new Promise<File | null>((resolve) => item.file(resolve))
-      if (file !== null) {
-        // Dedup key prefers webkitRelativePath (directory prefix included):
-        // same-named files in different directories must all survive.
-        const key = file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name
-        if (!got.has(key)) {
-          got.add(key)
-          files.push(file)
-        }
-      }
-    } else if (item.isDirectory) {
-      const reader = item.createReader()
+    if (node.isFile) {
+      const file = await new Promise<File | null>((resolve) => (node as FileSystemFileEntry).file(resolve))
+      if (file !== null) addFile(file)
+    } else if (node.isDirectory) {
+      const reader = (node as FileSystemDirectoryEntry).createReader()
       // readEntries caps at ~100 entries per call; loop until empty.
       while (true) {
         const batch = await new Promise<FileSystemEntry[] | null>((resolve) => reader.readEntries(resolve))
@@ -103,8 +108,8 @@ async function collectFiles(dt: DataTransfer | null): Promise<File[]> {
       }
     }
   }
-  for (const item of Array.from(dt.items ?? [])) {
-    if (item.kind === 'file') await visit(item)
+  for (const root of roots) {
+    if (root !== null) await visit(root)
   }
   return files
 }
@@ -140,6 +145,10 @@ function FolderButton({ addFolderDrafts, inputActions }: FolderButtonProps) {
       if (!dragContainsDirectory(e.dataTransfer ?? null)) return
       e.preventDefault()
       e.stopPropagation()
+      // dragover 在悬停期间高频重复触发，不能每次都计数——只在首次进入
+      // （遮罩未亮）时 +1，与 dragleave 的 -1 对称；否则悬停片刻后 depth
+      // 虚高，拖出窗口时一次 -1 归不了零，遮罩永久残留。
+      if (document.body.classList.contains('dsh-files-dragging')) return
       dragDepth += 1
       document.body.classList.add('dsh-files-dragging')
     }

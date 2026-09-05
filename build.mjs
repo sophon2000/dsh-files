@@ -13,6 +13,9 @@ await build({
   target: ['es2020'],
   outfile: 'lib/client.js',
   jsx: 'automatic',
+  // CHANGELOG 0.5.1 起按 minified 体积口径对外；banner/footer 原样拼接，
+  // ModuleLoader 包装不受压缩影响。
+  minify: true,
   // External packages are resolved through the factory's `require` at runtime,
   // mirroring how the official client modules load third-party bundles.
   external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],

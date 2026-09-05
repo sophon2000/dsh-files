@@ -81,7 +81,7 @@ export function windowLines(
     if (raw.length > budget) {
       lines.push({
         number: i + 1,
-        text: `${raw.slice(0, Math.max(0, budget))}…[truncated, ${raw.length} chars]`
+        text: `${raw.slice(0, Math.max(0, budget))}…[已截断，共 ${raw.length} 字符]`
       })
       break
     }
@@ -93,7 +93,7 @@ export function windowLines(
   if (hidden > 0 && lines.length > 0) {
     lines[lines.length - 1] = {
       ...lines[lines.length - 1],
-      text: `${lines[lines.length - 1].text}\n…[${hidden} more lines not shown — character budget reached; use offset/limit to page]`
+      text: `${lines[lines.length - 1].text}\n…[字符预算已用尽，还有 ${hidden} 行未显示；用 offset/limit 翻页]`
     }
   }
   return { totalLines, lines }

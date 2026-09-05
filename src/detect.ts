@@ -98,9 +98,13 @@ function looksLikeGb18030(bytes: Uint8Array): boolean {
 }
 
 /**
- * 无 BOM 的 UTF-16（ASCII 主导）识别：偶数长度 + 至少一半码元含零字节。
- * 中文 UTF-16 文本码元常见非零高位而不会被命中（可保守），已知二进制由
- * isKnownBinary 优先拒绝。
+ * 无 BOM 的 UTF-16（ASCII 主导）识别：偶数长度 + 单侧码元含零字节。
+ * 长样本（≥8 对）阈值 0.25，与 parse/text.ts 的 decodeUtf16WithoutBom
+ * 对齐——嗅探比解码严会让同一文件「auto 拒、显式 format 收」（如中文
+ * 占比偏高的混排文本，ASCII 字符的高位零字节占比落在 0.25-0.5 区间）。
+ * 短样本统计无意义：随机 6 字节可有 1/3 的对恰含零字节，须过半才认。
+ * 中文 UTF-16 文本码元常见非零高位而不会被命中（可保守），已知二进制
+ * 由 isKnownBinary 优先拒绝。
  */
 function looksLikeUtf16NoBom(bytes: Uint8Array): boolean {
   const n = Math.min(bytes.length, SNIFF_BYTES)
@@ -112,7 +116,8 @@ function looksLikeUtf16NoBom(bytes: Uint8Array): boolean {
     if (bytes[i] === 0) zeroOdd++
     if (bytes[i + 1] === 0) zeroEven++
   }
-  return zeroEven > pairs * 0.5 || zeroOdd > pairs * 0.5
+  const threshold = pairs >= 8 ? 0.25 : 0.5
+  return zeroEven > pairs * threshold || zeroOdd > pairs * threshold
 }
 
 function looksLikeUtf8(bytes: Uint8Array): boolean {

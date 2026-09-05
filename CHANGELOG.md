@@ -9,7 +9,17 @@
 - **文件夹按钮**：注入 `conversation.input.left`（官方回形针旁边）。点选目录后浏览器递归展平（`webkitRelativePath` 保留层级），逐文件进入官方附件管线——`conversation.createDrafts()` 铸造草稿（图片走视觉管线、其他文件自动启动官方后台上传）+ `inputActions.addAttachments()` 挂载。**显示、字节进度、取消/重试、会话切换续显、模型 handle 行全部由官方持有**，本插件不渲染任何卡片、不注册任何上传路由。
 - **read_document 工具**：继承 0.5.0 的单一职责服务端（PDF/DOCX/XLSX/文本解析，内容嗅探、编码链、分页、sheet 级访问）。
 
-client bundle 从 0.4.3 的 ~60KB 缩到 **4.9KB**（一个按钮 + 一次官方 API 调用）；配置 6 项；前置 harness ≥ 0.1.3-alpha.1。
+client bundle 从 0.4.3 的 ~60KB 缩到 **5.9KB**（一个按钮 + 一次官方 API 调用，minified）；配置 6 项；前置 harness ≥ 0.1.3-alpha.1。
+
+### 修复
+
+- **拖拽文件夹悬停后移出，遮罩不消失**：`dragover` 悬停期间高频重复触发，每次都累加计数，而 `dragleave` 只减一，depth 虚高后归不了零，全屏遮罩残留到下一次 drop。改为仅首次进入（遮罩未亮）时计数，与离开对称。
+- **拖拽多个文件只进第一个**：`collectFiles` 在异步展开阶段才调用 `webkitGetAsEntry()`/`getAsFile()`，Chrome drop 保护模式下返回 null，第二个起的文件/目录被静默丢弃。现改为 drop 事件栈内一次性快照全部 item 引用（entry 或 File），之后再异步展开；单目录递归不受影响。
+- **无 BOM UTF-16 嗅探与解码阈值不一致**：单侧零字节占比落在 0.25–0.5 区间的混排文本，auto 模式被拒、显式 `format=text` 能读。长样本（≥8 码元对）嗅探阈值统一为 0.25 与解码链对齐；短样本统计无意义，须过半才认。
+- **`readTimeoutMs` 未纳入配置校验**：其余 5 项均有正整数门禁，该项配 0/负数会直接进 `timeoutMs`。
+- 注释漂移修正：client 头注释版本号（0.6.0→0.5.1）、`formatOutputBudget` 头注释 xlsx 档位（实际为 3/4）、`cordis.patch.yml` 头注释 id 与 name 的语义。
+- 模型侧提示统一中文：windowLines 的截断/翻页标记此前为英文，与 pdf/xlsx 提示混用。
+- client bundle 构建开启 minify（9.9KB → 5.9KB），体积口径与产物一致。
 
 ## 0.5.0
 
