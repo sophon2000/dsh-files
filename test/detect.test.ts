@@ -99,7 +99,7 @@ test('formatFromExtension covers the supported set', () => {
 })
 
 test('SUPPORTED_FORMATS matches the enum union', () => {
-  assert.deepEqual([...SUPPORTED_FORMATS].sort(), ['docx', 'pdf', 'text', 'xlsx'])
+  assert.deepEqual([...SUPPORTED_FORMATS].sort(), ['doc', 'docx', 'pdf', 'text', 'xlsx'])
 })
 
 test('utf-16 without BOM is detected as text', () => {

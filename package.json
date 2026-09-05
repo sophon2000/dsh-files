@@ -1,6 +1,6 @@
 {
   "name": "dsh-files",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "DeepSeek Harness plugin: a folder-picker button next to the native paperclip. Flattened files enter the host 0.1.3+ native attachment pipeline (official draft rail, background upload, progress, model handle line); plus the read_document tool (text/PDF/DOCX/XLSX) the built-in read tool rejects as binary.",
   "keywords": [
     "deepseek",
@@ -42,7 +42,8 @@
   "dependencies": {
     "mammoth": "^1.8.0",
     "pdfjs-dist": "^4.10.38",
-    "read-excel-file": "^5.8.7"
+    "read-excel-file": "^5.8.7",
+    "word-extractor": "^1.0.4"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",

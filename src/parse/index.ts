@@ -3,6 +3,7 @@
 
 import type { DocumentFormat } from '../detect.js'
 import { parsePdf } from './pdf.ts'
+import { parseDoc } from './doc.ts'
 import { parseDocx } from './docx.ts'
 import { parseXlsx } from './xlsx.ts'
 import { decodeText } from './text.ts'
@@ -29,6 +30,8 @@ export async function parseDocument(
   switch (format) {
     case 'pdf':
       return parsePdf(bytes)
+    case 'doc':
+      return parseDoc(bytes)
     case 'docx':
       return parseDocx(bytes)
     case 'xlsx':

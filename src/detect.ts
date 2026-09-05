@@ -4,13 +4,14 @@
 //
 // Supported formats:
 //   pdf   — "%PDF-" header
+//   doc   — OLE Compound File (Word 97-2003 binary)
 //   docx  — ZIP archive whose central directory lists word/ members
 //   xlsx  — ZIP archive whose central directory lists xl/ members
 //   text  — UTF-8 (no NUL bytes) or UTF-16 with BOM
 
-export type DocumentFormat = 'pdf' | 'docx' | 'xlsx' | 'text'
+export type DocumentFormat = 'pdf' | 'doc' | 'docx' | 'xlsx' | 'text'
 
-export const SUPPORTED_FORMATS: ReadonlySet<string> = new Set(['pdf', 'docx', 'xlsx', 'text'])
+export const SUPPORTED_FORMATS: ReadonlySet<string> = new Set(['pdf', 'doc', 'docx', 'xlsx', 'text'])
 
 /** Null bytes in the first chunk defeat every text decoding we accept. */
 const SNIFF_BYTES = 8192
@@ -192,7 +193,7 @@ function isKnownBinary(bytes: Uint8Array): boolean {
  * 区分 docx/xlsx（ZIP 中央目录在文件尾部，头部看不到）。
  * hint 不参与头部判定——显式 format 场景由调用方走全量兜底。
  */
-export function sniffHead(bytes: Uint8Array): 'pdf' | 'text' | 'zip' | null {
+export function sniffHead(bytes: Uint8Array): 'pdf' | 'text' | 'zip' | 'doc' | null {
   const n = Math.min(bytes.length, SNIFF_BYTES)
   if (bytes.length >= 2 && ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff))) {
     return 'text'
@@ -202,6 +203,12 @@ export function sniffHead(bytes: Uint8Array): 'pdf' | 'text' | 'zip' | null {
   }
   if (n >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
     return 'zip'
+  }
+  // OLE Compound File（Word 97-2003）：8 字节固定魔数，必然不是文本。
+  // 老式 .xls/.ppt 同为 OLE 容器，头部无法与 .doc 区分——先按 doc 路由，
+  // 解析器找不到 Word 文档流时 loud fail，错误消息里给出可能性提示。
+  if (n >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0 && bytes[4] === 0xa1 && bytes[5] === 0xb1 && bytes[6] === 0x1a && bytes[7] === 0xe1) {
+    return 'doc'
   }
   if (looksLikeUtf8(bytes)) return 'text'
   if (isKnownBinary(bytes)) return null
@@ -233,6 +240,9 @@ export function sniffFormat(bytes: Uint8Array, hint?: string): DocumentFormat | 
     }
     return null
   }
+  if (n >= 8 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0 && bytes[4] === 0xa1 && bytes[5] === 0xb1 && bytes[6] === 0x1a && bytes[7] === 0xe1) {
+    return 'doc'
+  }
   if (looksLikeUtf8(bytes)) return 'text'
   if (isKnownBinary(bytes)) return null
   // GB18030 兜底：中文场景常见的 GBK/GB2312 文件，UTF-8 fatal 判定失败后的
@@ -254,6 +264,7 @@ export function formatFromExtension(name: string): DocumentFormat | null {
   if (dot < 0) return null
   const ext = name.slice(dot + 1).toLowerCase()
   if (ext === 'pdf') return 'pdf'
+  if (ext === 'doc') return 'doc'
   if (ext === 'docx') return 'docx'
   if (ext === 'xlsx') return 'xlsx'
   if (ext === 'txt' || ext === 'md' || ext === 'csv' || ext === 'json' || ext === 'log' || ext === 'yml' || ext === 'yaml' || ext === 'toml' || ext === 'ini') return 'text'

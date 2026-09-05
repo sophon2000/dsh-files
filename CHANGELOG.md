@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+### 文件域补全：.doc 解析、附件库窗口、文件夹垃圾过滤
+
+量化驱动（230 会话、14 个真实附件、12 次 read_document 调用的本机数据）：附件库 29% 是老式 .doc 而 read_document 读不了、7% 混入 Office 锁文件、模型对附件库零可见且搬不动任何一个文件。本版把「进 / 读 / 管」三段生命周期的官方空白各补一块：
+
+- **`.doc`（Word 97-2003）解析**：内容嗅探新增 OLE Compound File 魔数路由；macOS 走系统 `textutil`（金标对照中正文与日期段最完整），其他平台与 textutil 失败时回退纯 JS `word-extractor`。老式 `.xls`/`.ppt` 同为 OLE 容器，解析失败时错误消息给出可自纠提示。
+- **`attachment_list` 工具**：附件库对模型可见——原名、sha256 前缀、大小、修改时间，按时间降序；宿主进程只读扫描，路径全部内部拼接。
+- **`export_attachment` 工具**：按 sha 前缀（8+ 位 hex）或精确原名把附件拷贝进工作区，模型即可用官方 read/edit/bash 再加工；dest 经 `ctx.fs.resolve` 沙箱校验，`COPYFILE_EXCL` 防覆盖，前后发出 fs 观察事件，与内置工具同一观察惯例。
+- **文件夹垃圾过滤**：Office/WPS 锁文件、点开头隐藏文件（隐私边界：`.env`）、`Thumbs.db`/`desktop.ini` 等在 picker 与拖拽两条路径进入官方管线前跳过，跳过数量对用户明示。
+
+配置新增 `attachmentsDir`（默认按 `DSH_HOME` / `~/.dsh/attachments/v1` 自动探测）；systemPrompt 同步引导附件工作流。40 → 64 测试。
+
 ## 0.5.1
 
 ### 新形态：原生管线上只加一个文件夹按钮

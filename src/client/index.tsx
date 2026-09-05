@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Tooltip, IconFolderOpenOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { splitJunk } from './junk.ts'
 
 interface DraftDescriptor {
   id: string
@@ -169,15 +170,19 @@ function FolderButton({ addFolderDrafts, inputActions }: FolderButtonProps) {
       setBusy(true)
       void (async () => {
         try {
-          const files = await collectFiles(e.dataTransfer ?? null)
-          if (files.length === 0) return
-          const result = handlersRef.current.addFolderDrafts(files)
+          const { keep, junkCount } = splitJunk(await collectFiles(e.dataTransfer ?? null))
+          if (keep.length === 0) {
+            if (junkCount > 0) flash(`未添加：${junkCount} 个均为系统/隐藏文件`)
+            return
+          }
+          const result = handlersRef.current.addFolderDrafts(keep)
           if ('error' in result) {
             console.warn('dsh-files: folder drafts rejected:', result.error)
             flash('添加失败')
           } else if (handlersRef.current.inputActions !== undefined) {
             const added = handlersRef.current.inputActions.addAttachments([...result.ids])
             if (!added) flash('输入区忙，稍后重试')
+            else if (junkCount > 0) flash(`已添加 ${keep.length} 个文件，跳过 ${junkCount} 个系统/隐藏文件`)
           } else {
             flash('输入区不可用')
           }
@@ -218,18 +223,22 @@ function FolderButton({ addFolderDrafts, inputActions }: FolderButtonProps) {
     }
     input.addEventListener('cancel', finish)
     input.onchange = () => {
-      const files = Array.from(input.files ?? [])
+      const { keep, junkCount } = splitJunk(Array.from(input.files ?? []))
       finish()
-      if (files.length === 0) return
+      if (keep.length === 0) {
+        if (junkCount > 0) flash(`未添加：${junkCount} 个均为系统/隐藏文件`)
+        return
+      }
       setBusy(true)
       try {
-        const result = addFolderDrafts(files)
+        const result = addFolderDrafts(keep)
         if ('error' in result) {
           console.warn('dsh-files: folder drafts rejected:', result.error)
           flash('添加失败')
         } else if (inputActions !== undefined) {
           const added = inputActions.addAttachments([...result.ids])
           if (!added) flash('输入区忙，稍后重试')
+          else if (junkCount > 0) flash(`已添加 ${keep.length} 个文件，跳过 ${junkCount} 个系统/隐藏文件`)
         } else {
           flash('输入区不可用')
         }

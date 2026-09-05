@@ -17,13 +17,13 @@ import { windowLines } from './parse/text.ts'
  * - text：需要逐行精确定位（代码/配置），用满基础预算。
  * - xlsx：结构化表格行多列宽也会撑爆上下文，给 3/4，配合截断标记
  *   引导模型 offset 翻页增量取。
- * - pdf/docx：叙述性流式文本，模型通常只需关键段落，一次塞满会把上下文
+ * - pdf/doc/docx：叙述性流式文本，模型通常只需关键段落，一次塞满会把上下文
  *   稀释并推高 token 成本；给基础预算的一半，配合 windowLines 的截断标记
  *   引导模型用 offset/limit 翻页增量获取。
  */
 export function formatOutputBudget(format: DocumentFormat, base: number): number {
-  // pdf/docx：叙述性流式文本，模型通常只需关键段落，减半防上下文稀释。
-  if (format === 'pdf' || format === 'docx') return Math.max(2000, Math.floor(base / 2))
+  // pdf/doc/docx：叙述性流式文本，模型通常只需关键段落，减半防上下文稀释。
+  if (format === 'pdf' || format === 'doc' || format === 'docx') return Math.max(2000, Math.floor(base / 2))
   // xlsx：结构化表格信息密度高，但行多列宽也会撑爆上下文；给 3/4，配合
   // windowLines 的截断标记引导模型 offset 翻页增量取。
   if (format === 'xlsx') return Math.max(2000, Math.floor(base * 0.75))
@@ -66,7 +66,7 @@ function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): P
   if (limit > config.readLimit) throw new Error(`limit must be less than or equal to ${config.readLimit}`)
   const format = args.format === undefined ? 'auto' : args.format
   if (typeof format !== 'string' || (format !== 'auto' && !SUPPORTED_FORMATS.has(format))) {
-    throw new Error(`unsupported format "${String(format)}" (expected auto, pdf, docx, xlsx or text)`)
+    throw new Error(`unsupported format "${String(format)}" (expected auto, pdf, doc, docx, xlsx or text)`)
   }
   const sheet = typeof args.sheet === 'number' ? args.sheet : undefined
   if (sheet !== undefined && (!Number.isInteger(sheet) || sheet < 1)) {
@@ -80,7 +80,7 @@ function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): P
 }
 
 /** The session workspace cwd for this call, when one applies. */
-function sessionCwd(exec: { agent?: { session?: { header?: { cwd?: string } } } }): string | undefined {
+export function sessionCwd(exec: { agent?: { session?: { header?: { cwd?: string } } } }): string | undefined {
   return exec.agent?.session?.header?.cwd
 }
 
@@ -132,7 +132,7 @@ export function defineReadDocumentTool(ctx: {
   return defineTool({
     name: 'read_document',
     description:
-      'Read text/PDF/DOCX/XLSX the plain read tool cannot; page with offset/limit, list_sheets then sheet for XLSX.',
+      'Read text/PDF/DOC/DOCX/XLSX the plain read tool cannot; page with offset/limit, list_sheets then sheet for XLSX.',
     parameters: {
       file_path: {
         type: 'string',
@@ -141,7 +141,7 @@ export function defineReadDocumentTool(ctx: {
       },
       format: {
         type: 'string',
-        enum: ['auto', 'pdf', 'docx', 'xlsx', 'text'],
+        enum: ['auto', 'pdf', 'doc', 'docx', 'xlsx', 'text'],
         description: 'Optional format override; the sniffed content wins over this hint.'
       },
       offset: {
@@ -167,7 +167,7 @@ export function defineReadDocumentTool(ctx: {
         additionalProperties: false,
         properties: {
           path: { type: 'string', required: true },
-          format: { type: 'string', required: true, enum: ['pdf', 'docx', 'xlsx', 'text'] },
+          format: { type: 'string', required: true, enum: ['pdf', 'doc', 'docx', 'xlsx', 'text'] },
           offset: { type: 'integer', required: true },
           lines: {
             type: 'array',
@@ -238,7 +238,7 @@ export function defineReadDocumentTool(ctx: {
       if (headFormat === null && input.format === 'auto') {
         ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
         throw new FsError(
-          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
+          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOC, DOCX or XLSX)`,
           'FS_NOT_TEXT'
         )
       }
@@ -254,7 +254,7 @@ export function defineReadDocumentTool(ctx: {
       if (format === null) {
         ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
         throw new FsError(
-          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
+          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOC, DOCX or XLSX)`,
           'FS_NOT_TEXT'
         )
       }
