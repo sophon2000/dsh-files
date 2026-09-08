@@ -1,34 +1,17 @@
-// dsh-files 0.5.3 client face — folder upload (toolbar button + "+" menu
-// command), attachment dock, @ source.
+// dsh-files 0.6.0 client face — one button, no pipeline.
 //
-// Folder upload (0.5.3): two entries into one shared flow. The toolbar
-// button sits in `conversation.input.left` next to the native paperclip
-// (one click, always visible); the "+" popup menu carries the same action
-// as an official ActionSpec contribution (the /feedback shape). Real-use
-// feedback 2026-09-12: a menu-only entry buried the action at rank ~32/35
-// (CJK sorts last) — undiscoverable, so the button came back. Files enter
-// the host's native attachment pipeline (createDrafts + addAttachments):
-// progress, cancellation and the model handle line stay owned by the host.
-//
-// Attachment dock (0.5.3): one official Pill in `conversation.composer.dock`
-// (collapsed) expanding into the library card — see dock.tsx.
-//
-// @ source (0.6.1): an additional attachment source alongside the host's
-// workspace source. Picking one inserts the official model-faceable file
-// handle text (the host computes it via the LLM seam), so the agent sees the
-// same line it saw at upload time.
+// A single folder-picker button injected into `conversation.input.left`, i.e.
+// right next to the host's native paperclip. Files flattened from the picked
+// directory enter the host's native attachment pipeline:
+//   conversation.createDrafts(sessionId, files)  → mint drafts (images become
+//     image drafts; everything else starts the official background upload)
+//   inputActions.addAttachments(ids)             → official draft rail
+// Display, byte progress, cancel/retry, session-switch persistence and the
+// model-facing handle line are all owned by the host — 0.6.0 ships none of
+// them. The button is the only UI this plugin renders.
 
-import {
-  ensureStyles,
-  AttachmentDock,
-  FolderButton,
-  fetchAttachments,
-  pickFolder,
-  runFolderUpload,
-  setFolderUploader
-} from './dock.tsx'
-import type { FolderUploader } from './dock.tsx'
-import { formatBytes } from '../format.ts'
+import { useEffect, useRef, useState } from 'react'
+import { Tooltip, IconFolderOpenOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 
 interface DraftDescriptor {
   id: string
@@ -39,186 +22,272 @@ interface ConversationService {
   createDrafts(sessionId: string, files: readonly File[]): readonly DraftDescriptor[]
 }
 
-interface SessionRef {
-  sessionId: string
-}
+type FolderDraftResult = { ids: readonly string[] } | { error: string }
 
-function conversationOf(ctx: any, sessionId: string): ConversationService | undefined {
-  const conversation = ctx.sessions?.scope?.(sessionId)?.get?.('conversation')
-  return conversation !== undefined && typeof conversation.createDrafts === 'function' ? conversation : undefined
-}
+const STYLE_TAG = 'dsh-files/style.css'
+// Build-time capability: the qualified read-only artifact ships this disabled.
+declare const __FOLDER_UPLOAD_ENABLED__: boolean
 
-/** Draft creation through the official pipeline — shared by every entry. */
-function makeFolderUploader(ctx: any): FolderUploader {
-  return (sessionId, files) => {
-    const conversation = conversationOf(ctx, sessionId)
-    if (conversation === undefined) {
-      return { error: 'native attachment pipeline unavailable (harness >= 0.1.3 required)' }
-    }
-    try {
-      const drafts = conversation.createDrafts(sessionId, files)
-      return { ids: drafts.map((draft) => draft.id) }
-    } catch (error: unknown) {
-      return { error: error instanceof Error ? error.message : String(error) }
-    }
-  }
-}
-
-// ===================== + menu folder command (0.5.3) =====================
-
-interface CommandUiLike {
-  register(contribution: unknown): () => void
+function injectCss(): void {
+  if (typeof document === 'undefined') return
+  if (document.querySelector(`style[data-plugin-css=${JSON.stringify(STYLE_TAG)}]`) !== null) return
+  const tag = document.createElement('style')
+  tag.dataset.plugin = 'dsh-files'
+  tag.dataset.pluginCss = STYLE_TAG
+  tag.textContent = `
+.dsh-files-btn{width:28px;height:28px;padding:1px 6px;border:none;border-radius:999px;background:rgb(245,246,247);display:grid;place-items:center;color:rgb(15,17,21);cursor:pointer;line-height:0}
+.dsh-files-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}
+.dsh-files-btn:disabled{opacity:.5;cursor:default}
+.dsh-files-dragging:after{content:'松开以上传文件夹';position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);z-index:9999;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+`
+  document.head.appendChild(tag)
 }
 
 /**
- * Register the folder-upload action in the official "+" command menu
- * (ctx.commandUi contribution, ActionSpec). The service may initialize after
- * this plugin's apply, so registration rides ctx.inject; on hosts without
- * the command surface at all, a timed warn keeps the absence diagnosable.
+ * The host's drop pipeline has no webkitGetAsEntry anywhere: a dragged
+ * directory reaches it as one unreadable File and fails. These helpers keep
+ * directory drag-and-drop working. They only engage when the drag actually
+ * contains a directory — plain file drags are left entirely to the host.
  */
-function registerFolderCommand(ctx: any): void {
-  const uploader = makeFolderUploader(ctx)
-  const contribution = {
-    name: '上传文件夹',
-    description: () => '选择文件夹，展开其中全部文件加入输入区（自动跳过系统/隐藏文件）',
-    available: (session: SessionRef) => conversationOf(ctx, session.sessionId) !== undefined,
-    ui: {
-      kind: 'action',
-      run: (session: SessionRef) => {
-        void pickFolder().then(async (files) => {
-          if (files.length > 0) await runFolderUpload(files, session.sessionId)
-        })
-      }
-    }
+function dragContainsDirectory(dt: DataTransfer | null): boolean {
+  if (dt === null) return false
+  for (const item of Array.from(dt.items)) {
+    if (item.kind !== 'file') continue
+    const entry = item.webkitGetAsEntry?.()
+    if (entry !== null && entry !== undefined && entry.isDirectory) return true
   }
-  let registered = false
-  const register = (commandUi: CommandUiLike) => {
-    if (registered) return
-    registered = true
-    commandUi.register(contribution)
-  }
-  if (ctx.commandUi !== undefined) {
-    register(ctx.commandUi)
-  } else if (typeof ctx.inject === 'function') {
-    ctx.inject(['commandUi'], (scope: { commandUi?: CommandUiLike }) => {
-      if (scope.commandUi !== undefined) register(scope.commandUi)
-    })
-  }
-  setTimeout(() => {
-    if (!registered) {
-      console.warn('[dsh-files] commandUi 服务未就绪——+ 菜单里的「上传文件夹」入口未注册（harness 过旧或命令服务缺失）')
-    }
-  }, 5000)
+  return false
 }
 
-// ===================== @ attachment source (0.6.1) =====================
-
-const SOURCE_NAME = 'dsh-files-attachments'
-
-/** Register the attachment @ source next to the host's workspace source. */
-function registerAttachmentSource(ctx: {
-  inputTriggers: { registerSource(source: Record<string, unknown>): void }
-  effect(fn: () => unknown): void
-}): void {
-  if (typeof ctx.inputTriggers?.registerSource !== 'function') return
-  ctx.effect(() =>
-    ctx.inputTriggers.registerSource({
-      trigger: '@',
-      name: SOURCE_NAME,
-      order: 20,
-      showGroupTitle: true,
-      // 5a: 候选 = 附件库条目；只有 host 给出官方 handle 文本的行才提供引用
-      // (模型能看到与上传时一致的文件行)。插入文本即 handle 本身——与官方
-      // @ 引用只插路径的契约不同，附件不在工作区，模型识别的就是 handle 行。
-      candidates: async () => {
-        const result = await fetchAttachments()
-        if (result === undefined) return []
-        // 库内有附件却全部缺 handle = llm 服务缺席，@ 组会静默消失——
-        // 留一条可诊断日志，区分「没附件」和「服务没接上」。
-        if (result.rows.length > 0 && result.rows.every((row) => row.handle === undefined || row.handle === '')) {
-          console.warn('[dsh-files] @ 附件源：库内有附件但 host 未提供 handle（llm 服务缺席），候选不可用')
-        }
-        return result.rows
-          .filter((row) => row.handle !== undefined && row.handle !== '')
-          .slice(0, 50)
-          .map((row) => ({
-            name: row.name,
-            description: `附件 · ${formatBytes(row.bytes)}`,
-            icon: 'file',
-            value: row.handle ?? row.ref
-          }))
-      },
-      onPick: (pick: { candidate?: { value?: string } }) => {
-        const handle = pick.candidate?.value
-        if (handle === undefined || handle === '') return undefined
-        return {
-          insert: {
-            source: SOURCE_NAME,
-            ref: handle,
-            label: handle.split(/[\\/]/).filter(Boolean).pop() ?? '附件',
-            appearance: 'file',
-            clipboardText: handle
-          }
-        }
-      },
-      codec: {
-        clipboardText: (text: string) => text,
-        serialize: async (text: string) => text
+/** Flatten a DataTransfer into concrete files; directories recurse. */
+async function collectFiles(dt: DataTransfer | null): Promise<File[]> {
+  const files: File[] = []
+  if (dt === null) return files
+  const got = new Set<string>()
+  const visit = async (item: DataTransferItem | FileSystemEntry): Promise<void> => {
+    // DataTransferItem (the drag list) and FileSystemEntry (directory
+    // recursion) are two shapes: the former uses webkitGetAsEntry/getAsFile,
+    // the latter isFile/isDirectory/createReader directly.
+    if ('webkitGetAsEntry' in item) {
+      const entry = item.webkitGetAsEntry?.()
+      if (entry === undefined || entry === null) {
+        const file = item.getAsFile()
+        if (file !== null) files.push(file)
+        return
       }
-    })
+      await visit(entry)
+      return
+    }
+    if (item.isFile) {
+      const file = await new Promise<File | null>((resolve) => item.file(resolve))
+      if (file !== null) {
+        // Dedup key prefers webkitRelativePath (directory prefix included):
+        // same-named files in different directories must all survive.
+        const key = file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name
+        if (!got.has(key)) {
+          got.add(key)
+          files.push(file)
+        }
+      }
+    } else if (item.isDirectory) {
+      const reader = item.createReader()
+      // readEntries caps at ~100 entries per call; loop until empty.
+      while (true) {
+        const batch = await new Promise<FileSystemEntry[] | null>((resolve) => reader.readEntries(resolve))
+        if (batch === null || batch.length === 0) break
+        for (const child of batch) await visit(child)
+      }
+    }
+  }
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind === 'file') await visit(item)
+  }
+  return files
+}
+
+interface FolderButtonProps {
+  addFolderDrafts(files: readonly File[]): FolderDraftResult
+  inputActions: { addAttachments(ids: readonly string[]): boolean } | undefined
+}
+
+function FolderButton({ addFolderDrafts, inputActions }: FolderButtonProps) {
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flash = (text: string) => {
+    setNote(text)
+    if (resetTimer.current !== null) clearTimeout(resetTimer.current)
+    resetTimer.current = setTimeout(() => setNote(''), 2500)
+  }
+  const handlersRef = useRef({ addFolderDrafts, inputActions })
+  handlersRef.current = { addFolderDrafts, inputActions }
+  const busyRef = useRef(false)
+
+  // Directory drag-and-drop, window capture phase — the earliest point, so
+  // intercepting here (only when a directory is present) keeps plain file
+  // drags entirely with the host's own pipeline.
+  useEffect(() => {
+    let dragDepth = 0
+    const settle = () => {
+      dragDepth = 0
+      document.body.classList.remove('dsh-files-dragging')
+    }
+    const onDragOver = (e: DragEvent) => {
+      if (!dragContainsDirectory(e.dataTransfer ?? null)) return
+      e.preventDefault()
+      e.stopPropagation()
+      dragDepth += 1
+      document.body.classList.add('dsh-files-dragging')
+    }
+    const onDragLeave = (e: DragEvent) => {
+      if (!document.body.classList.contains('dsh-files-dragging')) return
+      // Only a leave that truly exits the document may clear the overlay;
+      // element-internal leaves (relatedTarget still on page) must not.
+      if (e.relatedTarget !== null) return
+      dragDepth = Math.max(0, dragDepth - 1)
+      if (dragDepth === 0) settle()
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!dragContainsDirectory(e.dataTransfer ?? null)) return
+      e.preventDefault()
+      e.stopPropagation()
+      settle()
+      if (busyRef.current) return
+      setBusy(true)
+      void (async () => {
+        try {
+          const files = await collectFiles(e.dataTransfer ?? null)
+          if (files.length === 0) return
+          const result = handlersRef.current.addFolderDrafts(files)
+          if ('error' in result) {
+            console.warn('dsh-files: folder drafts rejected:', result.error)
+            flash('添加失败')
+          } else if (handlersRef.current.inputActions !== undefined) {
+            const added = handlersRef.current.inputActions.addAttachments([...result.ids])
+            if (!added) flash('输入区忙，稍后重试')
+          } else {
+            flash('输入区不可用')
+          }
+        } catch (err) {
+          flash(err instanceof Error ? err.message : String(err))
+        } finally {
+          setBusy(false)
+        }
+      })()
+    }
+    const onDragEnd = () => settle()
+    window.addEventListener('dragover', onDragOver, true)
+    window.addEventListener('dragleave', onDragLeave, true)
+    window.addEventListener('drop', onDrop, true)
+    window.addEventListener('dragend', onDragEnd, true)
+    return () => {
+      settle()
+      window.removeEventListener('dragover', onDragOver, true)
+      window.removeEventListener('dragleave', onDragLeave, true)
+      window.removeEventListener('drop', onDrop, true)
+      window.removeEventListener('dragend', onDragEnd, true)
+    }
+  }, [])
+
+  // webkitdirectory picker: input.files already carries the recursive
+  // flattening with webkitRelativePath preserved per entry. The cancel branch
+  // must clean up — change never fires on cancel, and a hidden input left in
+  // the DOM would accumulate across cancellations.
+  const pick = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    ;(input as HTMLInputElement & { webkitdirectory?: boolean }).webkitdirectory = true
+    input.style.display = 'none'
+    document.body.appendChild(input)
+    const finish = () => {
+      input.remove()
+    }
+    input.addEventListener('cancel', finish)
+    input.onchange = () => {
+      const files = Array.from(input.files ?? [])
+      finish()
+      if (files.length === 0) return
+      setBusy(true)
+      try {
+        const result = addFolderDrafts(files)
+        if ('error' in result) {
+          console.warn('dsh-files: folder drafts rejected:', result.error)
+          flash('添加失败')
+        } else if (inputActions !== undefined) {
+          const added = inputActions.addAttachments([...result.ids])
+          if (!added) flash('输入区忙，稍后重试')
+        } else {
+          flash('输入区不可用')
+        }
+      } finally {
+        setBusy(false)
+      }
+    }
+    input.click()
+  }
+
+  return (
+    <Tooltip label={busy ? '添加中…' : note !== '' ? note : '上传文件夹'} side="top">
+      <button
+        type="button"
+        className="dsh-files-btn"
+        aria-label="上传文件夹"
+        disabled={busy}
+        onClick={pick}
+      >
+        <IconFolderOpenOutline16 size={14} />
+      </button>
+    </Tooltip>
   )
 }
 
-export function apply(ctx: any): void {
-  ensureStyles()
-
-  // ---- Folder upload, entry 1: the toolbar button (always visible) ----
-  // Same compact-control slot as the host's paperclip; the shared flow owns
-  // everything after the pick.
-  setFolderUploader(makeFolderUploader(ctx))
+export function apply(ctx: {
+  slots: {
+    inject(name: string, factory: () => unknown): unknown
+    register(spec: Record<string, unknown>, component: unknown): unknown
+  }
+  sessions: {
+    scope(sessionId: string): { get(name: string): unknown }
+  }
+}): void {
+  if (!__FOLDER_UPLOAD_ENABLED__) return
+  injectCss()
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register(
       {
         name: 'conversation.input.left',
         id: 'dsh-files-folder',
         order: 0,
-        inject: () => ({})
+        inject: (sessionId: string | undefined) => ({
+          addFolderDrafts: (files: readonly File[]): FolderDraftResult => {
+            if (sessionId === undefined) return { error: 'no active session' }
+            const conversation = ctx.sessions.scope(sessionId).get('conversation') as
+              | ConversationService
+              | undefined
+            if (conversation === undefined || typeof conversation.createDrafts !== 'function') {
+              return { error: 'native attachment pipeline unavailable (harness >= 0.1.3 required)' }
+            }
+            try {
+              const drafts = conversation.createDrafts(sessionId, files)
+              return { ids: drafts.map((draft) => draft.id) }
+            } catch (error: unknown) {
+              return { error: error instanceof Error ? error.message : String(error) }
+            }
+          }
+        })
       },
       FolderButton
     )
   )
-
-  // ---- Folder upload, entry 2: the official "+" menu command ----
-  registerFolderCommand(ctx)
-
-  // ---- Attachment library: a composer-dock pill + card ----
-  // conversation.composer.dock is the host's slot for "ambient entries below
-  // the composer card" (its own occupant is StatsPills). The dock bridges the
-  // session identity and input actions to the shared upload flow.
-  ctx.slots.inject('conversation.composer.dock', () =>
-    ctx.slots.register(
-      {
-        name: 'conversation.composer.dock',
-        id: 'dsh-files-attachments',
-        order: 0,
-        inject: (sessionId: string | undefined) => ({ sessionId })
-      },
-      AttachmentDock
-    )
-  )
-
-  // ---- @ 附件源（0.6.1，5a handle 插入） ----
-  registerAttachmentSource(ctx)
 }
 
 // Client bundles load through the ModuleLoader factory; esbuild's iife format
 // does not write entry exports into module.exports, so assign explicitly.
-// commandUi 必须显式声明——cordis 对未注入服务的属性访问直接抛错（0.5.3
-// 真机实测：声明缺失时整个客户端插件树加载失败并白屏报错）。
 declare const module: { exports: unknown } | undefined
 if (typeof module !== 'undefined' && module !== null) {
   module.exports = {
     apply,
-    inject: ['slots', 'sessions', 'inputTriggers', 'commandUi']
+    inject: ['slots', 'sessions']
   }
 }

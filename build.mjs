@@ -6,8 +6,10 @@ import { readFileSync } from 'node:fs'
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 await build({
-  entryPoints: ['src/client/index.tsx'],
+  define: { __FOLDER_UPLOAD_ENABLED__: process.env.DSH_FILES_FOLDER_UPLOAD === '1' ? 'true' : 'false' },
+  entryPoints: [process.env.DSH_FILES_FOLDER_UPLOAD === '1' ? 'src/client/index.tsx' : 'src/client/read-only.ts'],
   bundle: true,
+  minifySyntax: true,
   format: 'iife',
   platform: 'browser',
   target: ['es2020'],

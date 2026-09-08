@@ -4,13 +4,14 @@
 // embedded font fallback stays local).
 
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { DEFAULT_PARSE_LIMITS, type ParseLimits } from './limits.ts'
 
 /**
  * Extract the text layer of a PDF as line-oriented text (one entry per
  * original line where the content stream marks EOLs), pages separated by a
  * blank line.
  */
-export async function parsePdf(bytes: Uint8Array): Promise<string> {
+export async function parsePdf(bytes: Uint8Array, limits: Pick<ParseLimits, 'maxPdfPages' | 'maxParsedChars'> = DEFAULT_PARSE_LIMITS): Promise<string> {
   // pdfjs 会把传入的 data.buffer 作为 transferable 转移（Node 26 的 LoopbackPort
   // 对 detached buffer 的二次 transfer 抛 DataCloneError），因此解析前必须复制
   // 一份工作副本，保住调用方的 bytes 不被 detach。
@@ -26,7 +27,9 @@ export async function parsePdf(bytes: Uint8Array): Promise<string> {
     useSystemFonts: boolean
   }).promise
   try {
+    if (doc.numPages > limits.maxPdfPages) throw new Error('PDF exceeds page budget')
     const pages: string[] = []
+    let chars = 0
     for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
       const page = await doc.getPage(pageNo)
       try {
@@ -56,7 +59,10 @@ export async function parsePdf(bytes: Uint8Array): Promise<string> {
           }
         }
         if (line !== '') lines.push(line)
-        pages.push(lines.join('\n'))
+        const pageText = lines.join('\n')
+        chars += pageText.length
+        if (chars > limits.maxParsedChars) throw new Error('PDF exceeds parsed text budget')
+        pages.push(pageText)
       } finally {
         page.cleanup()
       }
