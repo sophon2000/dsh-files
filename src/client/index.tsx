@@ -25,6 +25,8 @@ interface ConversationService {
 type FolderDraftResult = { ids: readonly string[] } | { error: string }
 
 const STYLE_TAG = 'dsh-files/style.css'
+// Build-time capability: the qualified read-only artifact ships this disabled.
+declare const __FOLDER_UPLOAD_ENABLED__: boolean
 
 function injectCss(): void {
   if (typeof document === 'undefined') return
@@ -37,13 +39,7 @@ function injectCss(): void {
 .dsh-files-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}
 .dsh-files-btn:disabled{opacity:.5;cursor:default}
 .dsh-files-dragging:after{content:'松开以上传文件夹';position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);z-index:9999;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,.5)}
-/* 位置插位：把按钮排进官方回形针右侧、权限选择之前。绑定宿主 0.1.3 的
-   InputBar css-modules 哈希（JNhZqW_）；宿主升级哈希变了会整体失效并退回
-   默认位置（权限选择之后），功能不受影响。 */
-.JNhZqW_tools>.JNhZqW_add:nth-of-type(1){order:-3}
-.JNhZqW_tools>.JNhZqW_add:nth-of-type(2){order:-2}
-.JNhZqW_tools>input{order:-1}
-.JNhZqW_tools>.JNhZqW_modes{order:1}`
+`
   document.head.appendChild(tag)
 }
 
@@ -255,6 +251,7 @@ export function apply(ctx: {
     scope(sessionId: string): { get(name: string): unknown }
   }
 }): void {
+  if (!__FOLDER_UPLOAD_ENABLED__) return
   injectCss()
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register(

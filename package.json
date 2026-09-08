@@ -1,7 +1,7 @@
 {
   "name": "dsh-files",
-  "version": "0.5.1",
-  "description": "DeepSeek Harness plugin: a folder-picker button next to the native paperclip. Flattened files enter the host 0.1.3+ native attachment pipeline (official draft rail, background upload, progress, model handle line); plus the read_document tool (text/PDF/DOCX/XLSX) the built-in read tool rejects as binary.",
+  "version": "0.5.1-vh.2",
+  "description": "DSH read_document fork candidate: bounded, cancellable text/PDF/DOCX/XLSX extraction. Uses native attachments; folder UI disabled in the default build.",
   "keywords": [
     "deepseek",
     "harness",
@@ -24,7 +24,8 @@
     "cordis.patch.yml",
     "CHANGELOG.md",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "FORK.md"
   ],
   "license": "MIT",
   "dsh": {
@@ -40,21 +41,23 @@
     }
   },
   "dependencies": {
-    "mammoth": "^1.8.0",
-    "pdfjs-dist": "^4.10.38",
-    "read-excel-file": "^5.8.7"
+    "mammoth": "1.12.2",
+    "pdfjs-dist": "4.10.38",
+    "read-excel-file": "5.8.8",
+    "yauzl": "3.4.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.8 || 0.1.3-alpha.2.vh.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.8 || 0.1.3-alpha.2.vh.1",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.8 || 0.1.3-alpha.2.vh.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.8 || 0.1.3-alpha.2.vh.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "react": "^18.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/yauzl": "2.10.3",
     "@types/react": "~18.3.1",
     "esbuild": "^0.24.2",
     "jszip": "^3.10.1",
@@ -64,6 +67,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node build.mjs",
     "test": "node --test",
+    "check": "pnpm run build && tsc --noEmit && node --test",
     "prepublishOnly": "npm run build && npm test"
   },
   "allowScripts": {

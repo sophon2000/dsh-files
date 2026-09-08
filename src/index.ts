@@ -10,6 +10,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import { defineReadDocumentTool } from './tool.ts'
+import { DEFAULT_PARSE_LIMITS, parseLimits, type ParseLimits } from './parse/limits.ts'
 
 /** Cordis plugin name — must match the row id in cordis.patch.yml. */
 export const name = 'dsh-files'
@@ -27,6 +28,7 @@ export interface DocsConfig {
   maxSheets: number
   maxOutputChars: number
   readTimeoutMs: number
+  parser?: Partial<ParseLimits>
 }
 
 export const Config = z.object({
@@ -41,16 +43,28 @@ export const Config = z.object({
   /** Per-call window character budget (text uses it in full; pdf/docx get half, xlsx three-quarters). The window is truncated with an explicit marker when exceeded. */
   maxOutputChars: z.number().default(24000),
   /** read_document 单次执行超时（ms）。 */
-  readTimeoutMs: z.number().default(120_000)
+  readTimeoutMs: z.number().default(120_000),
+  parser: z.object({
+    maxExpandedBytes: z.number().default(DEFAULT_PARSE_LIMITS.maxExpandedBytes),
+    maxArchiveEntries: z.number().default(DEFAULT_PARSE_LIMITS.maxArchiveEntries),
+    maxCompressionRatio: z.number().default(DEFAULT_PARSE_LIMITS.maxCompressionRatio),
+    maxParsedChars: z.number().default(DEFAULT_PARSE_LIMITS.maxParsedChars),
+    maxPdfPages: z.number().default(DEFAULT_PARSE_LIMITS.maxPdfPages),
+    maxParseMs: z.number().default(DEFAULT_PARSE_LIMITS.maxParseMs),
+    workerHeapMb: z.number().default(DEFAULT_PARSE_LIMITS.workerHeapMb),
+    maxConcurrentReads: z.number().default(DEFAULT_PARSE_LIMITS.maxConcurrentReads)
+  }).default(DEFAULT_PARSE_LIMITS)
 })
 
 export function apply(ctx: any, config: DocsConfig): void {
+  const parser = parseLimits(config.parser)
   for (const [label, value] of [
     ['maxFileBytes', config.maxFileBytes],
     ['readLimit', config.readLimit],
     ['sheetRowLimit', config.sheetRowLimit],
     ['maxSheets', config.maxSheets],
-    ['maxOutputChars', config.maxOutputChars]
+    ['maxOutputChars', config.maxOutputChars],
+    ['readTimeoutMs', config.readTimeoutMs]
   ] as const) {
     if (!Number.isInteger(value) || value < 1) {
       throw new Error(`dsh-files: ${label} must be a positive integer`)
@@ -70,7 +84,8 @@ export function apply(ctx: any, config: DocsConfig): void {
       sheetRowLimit: config.sheetRowLimit,
       maxSheets: config.maxSheets,
       maxOutputChars: config.maxOutputChars,
-      readTimeoutMs: config.readTimeoutMs
+      readTimeoutMs: config.readTimeoutMs,
+      parser
     })
   )
 }

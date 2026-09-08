@@ -6,8 +6,10 @@ import { parsePdf } from './pdf.ts'
 import { parseDocx } from './docx.ts'
 import { parseXlsx } from './xlsx.ts'
 import { decodeText } from './text.ts'
+import type { ParseLimits } from './limits.ts'
 
 export interface ParseOptions {
+  limits?: ParseLimits
   sheetRowLimit: number
   maxSheets?: number
   /** 1-based；XLSX 专用，指定后读取该 sheet 全量。 */
@@ -28,7 +30,7 @@ export async function parseDocument(
   }
   switch (format) {
     case 'pdf':
-      return parsePdf(bytes)
+      return parsePdf(bytes, options.limits)
     case 'docx':
       return parseDocx(bytes)
     case 'xlsx':

@@ -5,6 +5,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { formatOutputBudget, defineReadDocumentTool } from '../src/tool.ts'
 import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
+import path from 'node:path'
+import { mkdtemp, mkdir, writeFile, readFile, stat, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 
 test('text uses the full base budget', () => {
   assert.equal(formatOutputBudget('text', 24000), 24000)
@@ -23,6 +26,10 @@ test('the halving never drops below the floor for a tiny base', () => {
   assert.equal(formatOutputBudget('pdf', 3000), 2000) // Math.max(2000, floor(1500))
   assert.equal(formatOutputBudget('docx', 2000), 2000)
   assert.equal(formatOutputBudget('xlsx', 2000), 2000) // floor(1500) clamped to 2000
+})
+
+test('format floor never increases the configured output budget', () => {
+  for (const format of ['pdf', 'docx', 'xlsx', 'text'] as const) assert.equal(formatOutputBudget(format, 128), 128)
 })
 
 // 回归：#5 —— readBytes 的 maxBytes 是整个文件上限（stat 超限即 FS_TOO_LARGE，
@@ -82,4 +89,47 @@ test('read_document still rejects files over maxFileBytes with FS_TOO_LARGE', as
     tool.execute({ file_path: 'over.bin' }, exec),
     (err: unknown) => err instanceof FsError && err.code === 'FS_TOO_LARGE'
   )
+})
+
+test('malformed optional arguments fail before filesystem access, never silently select defaults', async () => {
+  let reads = 0
+  const tool = defineReadDocumentTool({ fs: {
+    resolve: async () => { reads++; throw new Error('unexpected filesystem access') },
+    stat: async () => undefined,
+    readBytes: async () => new Uint8Array()
+  }, emit: () => undefined }, { readLimit: 800, maxFileBytes: 1024, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000 })
+  const exec = { signal: new AbortController().signal } as Parameters<typeof tool.execute>[1]
+  for (const field of ['offset', 'limit', 'sheet']) {
+    for (const value of ['2', null, true, 0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      await assert.rejects(tool.execute({ file_path: 'book.xlsx', [field]: value }, exec), new RegExp(field))
+    }
+  }
+  for (const value of ['true', 1, null]) await assert.rejects(tool.execute({ file_path: 'book.xlsx', list_sheets: value }, exec), /list_sheets/)
+  assert.equal(reads, 0)
+})
+
+test('one tool instance resolves same-name files using each call session cwd without cross-session reuse', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'dsh-files-workspaces-'))
+  try {
+    for (const name of ['a', 'b']) {
+      await mkdir(path.join(root, name))
+      await writeFile(path.join(root, name, 'same.txt'), `ONLY_${name}`)
+    }
+    // This adapter verifies Tool-to-FS cwd propagation with real files/workers;
+    // native DSH authorization itself is covered by the packaged Profile harness.
+    const tool = defineReadDocumentTool({ fs: {
+      resolve: async (file, opts) => {
+        const resolved = path.resolve(opts!.cwd!, file)
+        return { targetKey: FsTargetKey(resolved), displayPath: resolved }
+      },
+      stat: async target => ({ version: FsVersion('test'), type: 'file', size: (await stat(target.displayPath)).size }),
+      readBytes: async target => readFile(target.displayPath)
+    }, emit: () => undefined }, { readLimit: 800, maxFileBytes: 1024, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000 })
+    for (let round = 0; round < 2; round++) await Promise.all(['a', 'b'].map(async name => {
+      const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: path.join(root, name) } } } } as Parameters<typeof tool.execute>[1]
+      const result = await tool.execute({ file_path: 'same.txt' }, exec) as { path: string; lines: Array<{ text: string }> }
+      assert.equal(result.path, path.join(root, name, 'same.txt'))
+      assert.equal(result.lines[0].text, `ONLY_${name}`)
+    }))
+  } finally { await rm(root, { recursive: true, force: true }) }
 })

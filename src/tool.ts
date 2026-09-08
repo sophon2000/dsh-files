@@ -9,8 +9,8 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { FsError, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
 import { sniffFormat, sniffHead, HEAD_SNIFF_BYTES, SUPPORTED_FORMATS, formatFromExtension, type DocumentFormat } from './detect.ts'
-import { parseDocument, type ParseOptions } from './parse/index.ts'
-import { windowLines } from './parse/text.ts'
+import { runParser } from './parse/runner.ts'
+import { parseLimits, type ParseLimits } from './parse/limits.ts'
 
 /**
  * 单次 read_document 窗口的字符预算。按格式分级：
@@ -22,10 +22,10 @@ import { windowLines } from './parse/text.ts'
  */
 export function formatOutputBudget(format: DocumentFormat, base: number): number {
   // pdf/docx：叙述性流式文本，模型通常只需关键段落，减半防上下文稀释。
-  if (format === 'pdf' || format === 'docx') return Math.max(2000, Math.floor(base / 2))
+  if (format === 'pdf' || format === 'docx') return Math.min(base, Math.max(2000, Math.floor(base / 2)))
   // xlsx：结构化表格信息密度高，但行多列宽也会撑爆上下文；给 3/4，配合
   // windowLines 的截断标记引导模型 offset 翻页增量取。
-  if (format === 'xlsx') return Math.max(2000, Math.floor(base * 0.75))
+  if (format === 'xlsx') return Math.min(base, Math.max(2000, Math.floor(base * 0.75)))
   return base
 }
 
@@ -38,6 +38,7 @@ export interface ReadDocumentConfig {
   maxOutputChars: number
   /** read_document 单次执行的超时上限（ms）。大 PDF 解析可能超默认值。 */
   readTimeoutMs?: number
+  parser?: Partial<ParseLimits>
 }
 
 interface ParsedArgs {
@@ -49,28 +50,25 @@ interface ParsedArgs {
   listSheets: boolean
 }
 
-function assertPositiveInteger(value: number, label: string): void {
-  if (!Number.isInteger(value) || value < 1) throw new Error(`${label} must be a positive integer`)
-}
-
 function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): ParsedArgs {
   if (typeof args.file_path !== 'string' || args.file_path.trim() === '') {
     throw new Error('file_path must be a non-empty string')
   }
   const filePath = args.file_path.trim()
-  const offset = typeof args.offset === 'number' ? args.offset : 1
-  if (!Number.isInteger(offset) || offset < 1) throw new Error('offset must be a positive integer')
-  const limit = typeof args.limit === 'number' ? args.limit : config.readLimit
-  if (!Number.isInteger(limit) || limit < 1) throw new Error('limit must be a positive integer')
+  const offset = args.offset === undefined ? 1 : args.offset
+  if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 1) throw new Error('offset must be a positive safe integer')
+  const limit = args.limit === undefined ? config.readLimit : args.limit
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1) throw new Error('limit must be a positive safe integer')
   if (limit > config.readLimit) throw new Error(`limit must be less than or equal to ${config.readLimit}`)
   const format = args.format === undefined ? 'auto' : args.format
   if (typeof format !== 'string' || (format !== 'auto' && !SUPPORTED_FORMATS.has(format))) {
     throw new Error(`unsupported format "${String(format)}" (expected auto, pdf, docx, xlsx or text)`)
   }
-  const sheet = typeof args.sheet === 'number' ? args.sheet : undefined
-  if (sheet !== undefined && (!Number.isInteger(sheet) || sheet < 1)) {
-    throw new Error('sheet must be a positive integer')
+  const sheet = args.sheet
+  if (sheet !== undefined && (typeof sheet !== 'number' || !Number.isSafeInteger(sheet) || sheet < 1)) {
+    throw new Error('sheet must be a positive safe integer')
   }
+  if (args.list_sheets !== undefined && typeof args.list_sheets !== 'boolean') throw new Error('list_sheets must be a boolean')
   const listSheets = args.list_sheets === true
   if (listSheets && sheet !== undefined) {
     throw new Error('list_sheets and sheet are mutually exclusive: list first, then read a specific sheet')
@@ -81,36 +79,6 @@ function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): P
 /** The session workspace cwd for this call, when one applies. */
 function sessionCwd(exec: { agent?: { session?: { header?: { cwd?: string } } } }): string | undefined {
   return exec.agent?.session?.header?.cwd
-}
-
-/**
- * Run parseDocument with cooperative cancellation: the underlying parsers
- * (pdfjs/mammoth/read-excel-file) do not take an AbortSignal, so race the
- * parse against the signal and throw the FsError abort code when it fires.
- */
-async function parseDocumentWithAbort(
-  bytes: Uint8Array,
-  format: DocumentFormat,
-  options: ParseOptions,
-  signal: AbortSignal
-): Promise<string> {
-  if (signal.aborted) throw new FsError('read_document aborted', 'FS_ABORTED')
-  let settle!: (result: { ok: true; text: string } | { ok: false; error: unknown }) => void
-  const raced = new Promise<{ ok: true; text: string } | { ok: false; error: unknown }>((resolve) => {
-    settle = resolve
-  })
-  const onAbort = () => settle({ ok: false, error: new FsError('read_document aborted', 'FS_ABORTED') })
-  signal.addEventListener('abort', onAbort, { once: true })
-  try {
-    void parseDocument(bytes, format, options)
-      .then((text) => settle({ ok: true, text }))
-      .catch((error: unknown) => settle({ ok: false, error }))
-    const result = await raced
-    if (result.ok) return result.text
-    throw result.error
-  } finally {
-    signal.removeEventListener('abort', onAbort)
-  }
 }
 
 function renderContent(path: string, format: string, value: { offset: number; lines: Array<{ number: number; text: string }>; totalLines: number }): string {
@@ -128,6 +96,8 @@ export function defineReadDocumentTool(ctx: {
   }
   emit(event: string, target: FsTarget, observation: object, exec: object): void
 }, config: ReadDocumentConfig) {
+  const limits = parseLimits(config.parser)
+  let activeReads = 0
   return defineTool({
     name: 'read_document',
     description:
@@ -208,81 +178,85 @@ export function defineReadDocumentTool(ctx: {
     timeoutMs: config.readTimeoutMs ?? 120_000,
     async execute(args, exec) {
       const input = parseArgs(args, config)
-      const cwd = sessionCwd(exec)
-      const target = await ctx.fs.resolve(input.filePath, {
-        ...(cwd !== undefined ? { cwd } : {}),
-        signal: exec.signal
-      })
-      const info = await ctx.fs.stat(target, exec.signal)
-      if (info === undefined) {
-        ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
-        throw new FsError(`cannot read "${target.displayPath}": not found`, 'FS_NOT_FOUND')
-      }
-      if (info.type !== 'file') {
-        throw new FsError(`cannot read "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
-      }
-      if (info.size !== undefined && info.size > config.maxFileBytes) {
+      if (exec.signal.aborted) throw new FsError('read_document aborted', 'FS_ABORTED')
+      if (activeReads >= limits.maxConcurrentReads) throw new Error('document reader busy: concurrent read budget reached; retry after pending reads finish')
+      activeReads++
+      try {
+        const cwd = sessionCwd(exec)
+        const target = await ctx.fs.resolve(input.filePath, {
+          ...(cwd !== undefined ? { cwd } : {}),
+          signal: exec.signal
+        })
+        const info = await ctx.fs.stat(target, exec.signal)
+        if (info === undefined) {
+          ctx.emit('fs/observed', target, { kind: 'absent' }, exec)
+          throw new FsError(`cannot read "${target.displayPath}": not found`, 'FS_NOT_FOUND')
+        }
+        if (info.type !== 'file') {
+          throw new FsError(`cannot read "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
+        }
+        if (info.size !== undefined && info.size > config.maxFileBytes) {
+          ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
+          throw new FsError(
+            `cannot read "${target.displayPath}": file is ${info.size} bytes, over the ${config.maxFileBytes} byte limit`,
+            'FS_TOO_LARGE'
+          )
+        }
+        // readBytes 的 maxBytes 是整个文件上限：底层 stat 后若 size > maxBytes
+        // 直接抛 FS_TOO_LARGE，不做截断。因此不能先按 64 KiB 嗅探头部——那会把
+        // 任何更大的文件挡在门外。一次读满 maxFileBytes，格式判定从缓冲头部截取。
+        const bytes = await ctx.fs.readBytes(target, exec.signal, config.maxFileBytes)
+        const head = bytes.subarray(0, Math.min(HEAD_SNIFF_BYTES, bytes.length))
+        const headFormat = sniffHead(head)
+        if (headFormat === null && input.format === 'auto') {
+          ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
+          throw new FsError(
+            `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
+            'FS_NOT_TEXT'
+          )
+        }
+        // zip 需要中央目录（在文件尾部）才能区分 docx/xlsx；
+        // headFormat 为 null 只发生在显式 format 场景，走完整嗅探兜底。
+        // auto 模式下的 hint 取扩展名：字节完全未知时（且非已知二进制）
+        // 允许按扩展名兜底解析，解析器仍会校验结构并 loud fail。
+        const hint = input.format === 'auto' ? (formatFromExtension(input.filePath) ?? undefined) : input.format
+        const format =
+          headFormat === 'zip' || headFormat === null
+            ? sniffFormat(bytes, hint)
+            : headFormat
+        if (format === null) {
+          ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
+          throw new FsError(
+            `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
+            'FS_NOT_TEXT'
+          )
+        }
+        // sheet/list_sheets 只对 xlsx 有意义：对 PDF/DOCX/text 显式报错，
+        // 防止模型以为 sheet 参数生效而拿到完整（未按 sheet 过滤）内容。
+        if ((input.sheet !== undefined || input.listSheets) && format !== 'xlsx') {
+          ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
+          throw new FsError(
+            `cannot read "${target.displayPath}": sheet/list_sheets parameters are only supported for XLSX files (detected format: ${format})`,
+            'FS_NOT_TEXT'
+          )
+        }
+        const window = await runParser({
+          bytes, format,
+          options: { sheetRowLimit: config.sheetRowLimit, maxSheets: config.maxSheets, sheet: input.sheet, listOnly: input.listSheets },
+          limits, offset: input.offset, limit: input.limit,
+          maxOutputChars: formatOutputBudget(format, config.maxOutputChars)
+        }, exec.signal)
         ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-        throw new FsError(
-          `cannot read "${target.displayPath}": file is ${info.size} bytes, over the ${config.maxFileBytes} byte limit`,
-          'FS_TOO_LARGE'
-        )
-      }
-      // readBytes 的 maxBytes 是整个文件上限：底层 stat 后若 size > maxBytes
-      // 直接抛 FS_TOO_LARGE，不做截断。因此不能先按 64 KiB 嗅探头部——那会把
-      // 任何更大的文件挡在门外。一次读满 maxFileBytes，格式判定从缓冲头部截取。
-      const bytes = await ctx.fs.readBytes(target, exec.signal, config.maxFileBytes)
-      const head = bytes.subarray(0, Math.min(HEAD_SNIFF_BYTES, bytes.length))
-      const headFormat = sniffHead(head)
-      if (headFormat === null && input.format === 'auto') {
-        ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-        throw new FsError(
-          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
-          'FS_NOT_TEXT'
-        )
-      }
-      // zip 需要中央目录（在文件尾部）才能区分 docx/xlsx；
-      // headFormat 为 null 只发生在显式 format 场景，走完整嗅探兜底。
-      // auto 模式下的 hint 取扩展名：字节完全未知时（且非已知二进制）
-      // 允许按扩展名兜底解析，解析器仍会校验结构并 loud fail。
-      const hint = input.format === 'auto' ? (formatFromExtension(input.filePath) ?? undefined) : input.format
-      const format =
-        headFormat === 'zip' || headFormat === null
-          ? sniffFormat(bytes, hint)
-          : headFormat
-      if (format === null) {
-        ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-        throw new FsError(
-          `cannot read "${target.displayPath}": unrecognized file content (expected text, PDF, DOCX or XLSX)`,
-          'FS_NOT_TEXT'
-        )
-      }
-      // sheet/list_sheets 只对 xlsx 有意义：对 PDF/DOCX/text 显式报错，
-      // 防止模型以为 sheet 参数生效而拿到完整（未按 sheet 过滤）内容。
-      if ((input.sheet !== undefined || input.listSheets) && format !== 'xlsx') {
-        ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-        throw new FsError(
-          `cannot read "${target.displayPath}": sheet/list_sheets parameters are only supported for XLSX files (detected format: ${format})`,
-          'FS_NOT_TEXT'
-        )
-      }
-      // 解析器不接受 AbortSignal；这里包装一层协作取消：
-      // 信号触发时立即中止等待，符合 dsh 工具的取消契约。
-      const text = await parseDocumentWithAbort(bytes, format, {
-        sheetRowLimit: config.sheetRowLimit,
-        maxSheets: config.maxSheets,
-        sheet: input.sheet,
-        listOnly: input.listSheets
-      }, exec.signal)
-      const window = windowLines(text, input.offset, input.limit, formatOutputBudget(format, config.maxOutputChars))
-      ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)
-      return {
-        path: target.displayPath,
-        format,
-        offset: input.offset,
-        lines: window.lines,
-        totalLines: window.totalLines,
-        ...(input.sheet !== undefined ? { sheet: input.sheet } : {})
+        return {
+          path: target.displayPath,
+          format,
+          offset: input.offset,
+          lines: window.lines,
+          totalLines: window.totalLines,
+          ...(input.sheet !== undefined ? { sheet: input.sheet } : {})
+        }
+      } finally {
+        activeReads--
       }
     },
     presentCall(args) {
