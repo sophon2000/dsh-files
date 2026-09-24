@@ -1,12 +1,14 @@
 # dsh-files: read-only qualification candidate
 
-## 0.5.1-vh.3 — DSH 0.1.7-rc.1.vh.1 consumer
+## 0.5.1-vh.4 — DSH 0.1.7-rc.1.vh.2 consumer
 
 The Web bundle previews PDF and Office files for the Human, while its model-facing
 `read` tool remains UTF-8 text-only. `read_document` therefore remains the
 bounded model-facing extractor for PDF, DOCX and XLSX. The disabled folder UI
 no longer declares the removed `dsh-client-runtime` dependency. Peer versions
-pin the qualified DSH fork baseline and Cordis/Schemastery versions.
+pin the qualified DSH fork baseline and Cordis/Schemastery versions. This build
+updates the exact Host peers for the lint- and catalog-clean DSH `vh.2` artifact;
+the parser and default disabled folder UI are unchanged from `vh.3`.
 
 Local evidence: `pnpm run check` passed 57 tests; a fresh isolated Web Profile
 installed the packed candidate, composed its `files-toolkit` row, and completed
