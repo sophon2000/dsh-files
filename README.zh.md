@@ -1,4 +1,4 @@
-> Fork 验证预发行版 `0.5.1-vh.3`：构建、分发和边界以 [FORK.md](FORK.md) 为准。默认不显示文件夹 UI。下面保留上游历史说明，不作为本 fork 的安装或发行步骤。仅使用本 fork GitHub releases 中经核验的产物，不安装 npm 上的同名包。
+> Fork 验证预发行版 `0.5.1-vh.4`：构建、分发和边界以 [FORK.md](FORK.md) 为准。默认不显示文件夹 UI。下面保留上游历史说明，不作为本 fork 的安装或发行步骤。仅使用本 fork GitHub releases 中经核验的产物，不安装 npm 上的同名包。
 
 <div align="center">
 

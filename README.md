@@ -1,4 +1,4 @@
-> Fork qualification prerelease `0.5.1-vh.3`: see [FORK.md](FORK.md) for the authoritative build, distribution and safety boundaries. Default builds add no folder UI. The upstream documentation below is historical, not this fork's installation/release instructions. Use only verified assets from this fork's GitHub releases, never the unrelated npm name.
+> Fork qualification prerelease `0.5.1-vh.4`: see [FORK.md](FORK.md) for the authoritative build, distribution and safety boundaries. Default builds add no folder UI. The upstream documentation below is historical, not this fork's installation/release instructions. Use only verified assets from this fork's GitHub releases, never the unrelated npm name.
 
 <div align="center">
 

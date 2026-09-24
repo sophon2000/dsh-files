@@ -1,5 +1,9 @@
 # Changelog
 
+# 0.5.1-vh.4 (2026-09-24)
+
+- Pin the DSH 0.1.7-rc.1.vh.2 consumer baseline. Keep the bounded extractor and disabled folder UI unchanged.
+
 # 0.5.1-vh.3 (2026-09-24)
 
 - Pin the DSH 0.1.7-rc.1.vh.1 consumer baseline and current Cordis/Schemastery peers.
