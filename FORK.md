@@ -1,5 +1,18 @@
 # dsh-files: read-only qualification candidate
 
+## 0.5.1-vh.3 — DSH 0.1.7-rc.1.vh.1 consumer
+
+The Web bundle previews PDF and Office files for the Human, while its model-facing
+`read` tool remains UTF-8 text-only. `read_document` therefore remains the
+bounded model-facing extractor for PDF, DOCX and XLSX. The disabled folder UI
+no longer declares the removed `dsh-client-runtime` dependency. Peer versions
+pin the qualified DSH fork baseline and Cordis/Schemastery versions.
+
+Local evidence: `pnpm run check` passed 57 tests; a fresh isolated Web Profile
+installed the packed candidate, composed its `files-toolkit` row, and completed
+a real replayed `read_document` Tool call across the DSH/Web/Session boundary.
+The previous vh.2 notes below describe the earlier qualification baseline.
+
 2026-09-08 · `0.5.1-vh.2` · upstream `a814c7b89b0800870d3404d7b51362e9914a8092`.
 Development branch: `vh/reader-qualification`. Qualification prerelease line; not an installed main Profile dependency.
 Distribution, when published, is exclusively the versioned assets at `https://github.com/sophon2000/dsh-files/releases`;

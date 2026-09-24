@@ -1,5 +1,11 @@
 # Changelog
 
+# 0.5.1-vh.3 (2026-09-24)
+
+- Pin the DSH 0.1.7-rc.1.vh.1 consumer baseline and current Cordis/Schemastery peers.
+- Remove the obsolete `dsh-client-runtime` injection from the disabled folder UI.
+- Verify build, 57 parser/tool tests, and a real isolated Web Profile `read_document` call.
+
 ## 0.5.1
 
 ### 新形态：原生管线上只加一个文件夹按钮
