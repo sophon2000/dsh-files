@@ -124,7 +124,7 @@ try {
  await writeFile(`${root}/history.json`,JSON.stringify(result,null,2));
  const events=result.events.filter(e=>e.event.type==='tool/result');
  assert.equal(events.length,cases.length,'all calls must produce real Tool results');
- const results=new Map(events.map(e=>{const d=e.event.data;const r=d.message.content.find(c=>c.type==='tool-result');return [r.toolCallId,{error:r.isError,text:r.content.map(c=>c.text??'').join('\n'),meta:d.meta,code:d.error?.code}];}));
+ const results=new Map(events.map(e=>{const d=e.event.data;const r=d.message;return [r.toolCallId,{error:r.isError,text:r.content.map(c=>c.text??'').join('\n'),meta:d.meta,code:d.error?.code}];}));
  for(const id of ['native_upload','sheets','sheet2','page','rowcap','text','docx','pdf','outside','symlink','native_read'])assert.equal(results.get(id).error,false,id);
  for(const id of ['fake','missing','oversize','bad_sheet','conflict','bad_offset','denied'])assert.equal(results.get(id).error,true,id);
  assert.match(results.get('sheets').text,/1\. 分镜\n2\. 配音/);
