@@ -110,7 +110,7 @@ function makeExportContext() {
 
 test('attachment_list tool reports the store contents', async () => {
   const tool = defineAttachmentListTool({ attachmentsDir: store })
-  const result = (await tool.execute({}, {})) as {
+  const result = (await tool.execute({}, {} as never)) as {
     count: number
     truncated: boolean
     totalBytes: number
@@ -128,7 +128,7 @@ test('export_attachment copies bytes into the workspace and emits observations',
   const tool = defineAttachmentExportTool(ctx as never, { attachmentsDir: store })
   const dest = join(workspace, 'out', FAKE_NAME)
   await mkdir(join(workspace, 'out'), { recursive: true })
-  const result = (await tool.execute({ attachment: FAKE_SHA.slice(0, 8), dest_path: dest }, {})) as {
+  const result = (await tool.execute({ attachment: FAKE_SHA.slice(0, 8), dest_path: dest }, {} as never)) as {
     path: string
     name: string
     bytes: number
@@ -147,7 +147,7 @@ test('export_attachment refuses an existing destination', async () => {
   const dest = join(workspace, FAKE_NAME)
   await writeFile(dest, 'occupied')
   await assert.rejects(
-    () => tool.execute({ attachment: FAKE_NAME, dest_path: dest }, {}),
+    () => tool.execute({ attachment: FAKE_NAME, dest_path: dest }, {} as never),
     /destination already exists/
   )
 })
@@ -156,14 +156,14 @@ test('export_attachment requires non-empty args', async () => {
   const { ctx } = makeExportContext()
   const tool = defineAttachmentExportTool(ctx as never, { attachmentsDir: store })
   // 缺参由 dsh-tools 的 schema 校验先拦（required 属性）。
-  await assert.rejects(() => tool.execute({}, {}), /missing required property "attachment"/)
+  await assert.rejects(() => tool.execute({}, {} as never), /missing required property "attachment"/)
   // 存在但为空的参数由工具层 requireString 拦。
   await assert.rejects(
-    () => tool.execute({ attachment: '  ', dest_path: 'x' }, {}),
+    () => tool.execute({ attachment: '  ', dest_path: 'x' }, {} as never),
     /attachment must be/
   )
   await assert.rejects(
-    () => tool.execute({ attachment: FAKE_SHA.slice(0, 8), dest_path: '' }, {}),
+    () => tool.execute({ attachment: FAKE_SHA.slice(0, 8), dest_path: '' }, {} as never),
     /dest_path must be/
   )
 })

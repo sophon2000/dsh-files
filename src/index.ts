@@ -12,6 +12,7 @@ import z from '@deepseek-ai/schemastery'
 import { defineReadDocumentTool } from './tool.ts'
 import { defineAttachmentListTool, defineAttachmentExportTool } from './attachment-tool.ts'
 import { defaultAttachmentsDir } from './attachments.ts'
+import { registerAttachmentRoutes } from './attachment-loop.ts'
 
 /** Cordis plugin name — must match the row id in cordis.patch.yml. */
 export const name = 'dsh-files'
@@ -31,6 +32,12 @@ export interface DocsConfig {
   readTimeoutMs: number
   /** 附件库目录；空串按 DSH_HOME / ~/.dsh 自动探测。 */
   attachmentsDir: string
+  /** 附件闭环总开关：false 时不注册面板/下载/导出/@ 源路由（工具仍可用）。 */
+  attachmentsEnabled: boolean
+  /** 单次附件下载/导出的字节上限（超限 413）。 */
+  maxDownloadBytes: number
+  /** 非回环 host[:port] 授权列表（LAN/域名部署必配，语义同官方 --trusted-host）。 */
+  trustedHosts: string[]
 }
 
 export const Config = z.object({
@@ -47,7 +54,13 @@ export const Config = z.object({
   /** read_document 单次执行超时（ms）。 */
   readTimeoutMs: z.number().default(120_000),
   /** 附件库根（attachments/v1）；空串按 DSH_HOME / ~/.dsh/attachments/v1 自动探测。 */
-  attachmentsDir: z.string().default('')
+  attachmentsDir: z.string().default(''),
+  /** 附件闭环总开关：false 时不注册任何附件 UI 路由（attachment_list/export_attachment 工具仍生效）。 */
+  attachmentsEnabled: z.boolean().default(true),
+  /** 单次附件下载/导出的字节上限（超限 413）。 */
+  maxDownloadBytes: z.number().default(200 * MEBIBYTE),
+  /** 非回环 host[:port] 授权列表；语义同官方 --trusted-host（裸 host 任意端口、host:port 精确）。 */
+  trustedHosts: z.array(String).default([])
 })
 
 export function apply(ctx: any, config: DocsConfig): void {
@@ -57,11 +70,15 @@ export function apply(ctx: any, config: DocsConfig): void {
     ['sheetRowLimit', config.sheetRowLimit],
     ['maxSheets', config.maxSheets],
     ['maxOutputChars', config.maxOutputChars],
-    ['readTimeoutMs', config.readTimeoutMs]
+    ['readTimeoutMs', config.readTimeoutMs],
+    ['maxDownloadBytes', config.maxDownloadBytes]
   ] as const) {
     if (!Number.isInteger(value) || value < 1) {
       throw new Error(`dsh-files: ${label} must be a positive integer`)
     }
+  }
+  for (const entry of config.trustedHosts) {
+    if (entry.trim() === '') throw new Error('dsh-files: trustedHosts entries must be non-empty')
   }
 
   ctx.systemPrompt.section({
@@ -84,4 +101,35 @@ export function apply(ctx: any, config: DocsConfig): void {
   )
   ctx.tools.register(defineAttachmentListTool({ attachmentsDir }))
   ctx.tools.register(defineAttachmentExportTool(ctx, { attachmentsDir }))
+
+  // ---- Attachment loop: panel / download / export / @ source routes ----
+  // All services are optional: the read_document + attachment tools keep
+  // working in headless or attachment-less deployments; routes simply skip.
+  // Registration is deferred through ctx.inject — webServer/attachments/
+  // sessions initialize after this plugin's apply, and a plain ctx.get at
+  // apply time would see a not-yet-activated webServer (probe-verified).
+  if (!config.attachmentsEnabled) return
+  ctx.inject?.(
+    ['webServer', 'attachments', 'sessions', 'llm'],
+    (loopCtx: any) => {
+      try {
+        registerAttachmentRoutes(
+          { webServer: loopCtx.webServer },
+          {
+            attachments: loopCtx.attachments,
+            llm: loopCtx.llm,
+            sessions: loopCtx.sessions
+          },
+          {
+            attachmentsDir,
+            maxDownloadBytes: config.maxDownloadBytes,
+            trustedHosts: config.trustedHosts
+          }
+        )
+        console.log('[dsh-files] attachment loop routes registered')
+      } catch (error) {
+        console.warn(`[dsh-files] attachment loop registration failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  )
 }
