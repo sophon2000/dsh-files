@@ -25,7 +25,7 @@ dsh-files fills exactly those two holes. **Read**: the AI gets the text out of P
 
 ## What changed in this release
 
-- **Adapted to the latest harness** (measured on 0.2.0-rc.2; the 0.1.7 line still works)
+- **SDK aligned with the host at 0.2.0-rc.2**: fixes "the plugin button is missing and native upload is dead in the desktop App" — the plugin used to be built against the old SDK, colliding with the host's newer bundled components in the client module graph
 - **Errors now speak plainly**: a failure used to hand you a cold error code; now it tells you **what to change next**. Reach the server over your LAN and the attachment routes answer 403 — the response prints the exact `trustedHosts` line to add, ready to copy
 - **LAN / domain deployments are documented now**: that section used to be blank, leaving you to guess
 - **The division of work with the host is written down**: what the host already does (upload, images, document preview) versus what remains unique to this plugin — so the wheel is not reinvented
@@ -91,7 +91,8 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 | dsh-files | Harness | Notes |
 | --- | --- | --- |
-| 0.5.3 | 0.1.7-alpha.1; **0.2.0-rc.2 (measured)** | Current. Pins `@deepseek-ai/dsh-fs/dsh-tools/dsh-client-ui-primitives` at `0.1.7-alpha.1`; client icons follow the host's `Regular/Medium` naming. |
+| 0.5.5 | **0.2.0-rc.2 (current, measured)** | SDK aligned with the host `0.2.0-rc.2` (`dsh-fs` / `dsh-tools` / `dsh-client-ui-primitives` all at the host version), so client components resolve without a version ambiguity. |
+| 0.5.3–0.5.4 | 0.1.7-alpha.1 | SDK pinned at `0.1.7-alpha.1`; on a `0.2.0-rc.2` host the client icons may fail to resolve (see below). |
 | 0.5.x | ≥ 0.1.3-alpha.1 | Older SDK pins (`0.1.0-rc.x`); attachment dock and `@` source predate the host's `conversation.composer.dock` slot. |
 | 0.6.x | — | Never released (folded into 0.5.2/0.5.3); do not use. |
 

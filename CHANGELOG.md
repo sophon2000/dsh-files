@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.5
+
+### SDK 全线对齐宿主 0.2.0-rc.2（修「客户端插件在桌面端不加载」）
+
+**问题**：0.5.3/0.5.4 把 `@deepseek-ai/dsh-fs` / `dsh-tools` / `dsh-client-ui-primitives` 钉在 `0.1.7-alpha.1`，而宿主已是 `0.2.0-rc.2`。同一个包名在客户端模块图里出现两个版本，**桌面端 App（其 `ui-primitives` 是内嵌的 `0.2.0-rc.2`）里 dsh-files 的客户端半加载失败**——表现为输入区旁的文件夹按钮不出现、原生上传也不可用（整棵客户端插件树受牵连）。网页版 `dsh web` 因宿主发货行恰好也是 `0.1.7-alpha.1` 而自洽，所以只在 App 上暴露。
+
+**修复**：把 14 个 `@deepseek-ai/*` 声明（3 个 dependencies + 11 个 devDependencies）统一升到 `0.2.0-rc.2`，与宿主同版本。已核对 `dsh-client-ui-primitives` 新旧两版的导出面：**本插件用到的 12 个组件/图标在 `0.2.0-rc.2` 中全部存在**，且新版导出面只增不减（新增 `closeTopModal`/`ImageLightbox`/`MenuGroup`/`MenuShortcut`/`ShortcutKeys` 等）；`dsh-fs` 的类型面零差异，`dsh-tools` 仅新增可选成员。客户端 bundle 的外部请求集**与升级前完全一致**（`react` / `react/jsx-runtime` / `@deepseek-ai/dsh-client-ui-primitives`），故本次升版不改变依赖形状。
+
+### 附带修掉的 profile 层问题（非本仓代码）
+
+排查过程中发现宿主 profile 侧有三处会导致同一类故障，已一并修正：
+
+- **`pnpm-workspace.yaml` 的 `overrides` 把 `@deepseek-ai/dsh-tools` 写死为 `0.2.0-rc.1`**：这是单一真源，`pnpm install` 每次都会把版本打回 rc.1（改 `package.json` 无效）。宿主 CLI 是 `0.2.0-rc.2`，`dsh-tools@rc.1` 注册不出 `tools` 服务 → 26 个插件全部等待、`agent-loop`（必填）不激活 → 启动失败。已改为 `0.2.0-rc.2`。
+- **profile 根 `ui-primitives` 是 `0.1.7-alpha.1`**：已升到 `0.2.0-rc.2`，与宿主内嵌版本一致。
+- **`dsh-files` 的嵌套 `node_modules` 是旧 pnpm store**：删掉后重新解析，现与仓库声明一致。
+
+### 测试与工程
+
+- SDK 换成 `0.2.0-rc.2` 后：`npm test`（双 tsconfig typecheck + 单测）**100/100 全绿**。
+- 客户端 bundle 重新构建，产物结构与升级前一致。
+
 ## 0.5.4
 
 ### 失败可自救 + 边界声明（未知使用需求的普适性）
