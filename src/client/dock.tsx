@@ -350,16 +350,32 @@ interface AttachmentListResponse {
   totalBytes: number
 }
 
+/**
+ * 路由失败体：0.5.4 起服务端在错误码之外附 `hint`（可执行的一步）与
+ * `detail`（现场数值）。面板优先展示 hint——裸错误码对未知部署者无用。
+ */
+interface RouteFailureBody {
+  error?: string
+  hint?: string
+}
+
+export type AttachmentListResult =
+  | ({ ok: true } & AttachmentListResponse)
+  | { ok: false; status: number; hint: string | undefined }
+
 /** Fetch the library list (unfiltered; the panel filters client-side). */
-export async function fetchAttachments(): Promise<AttachmentListResponse | undefined> {
+export async function fetchAttachments(): Promise<AttachmentListResult> {
   try {
     const response = await fetch('/plugins/dsh-files/attachments?limit=300', {
       headers: { accept: 'application/json' }
     })
-    if (!response.ok) return undefined
-    return (await response.json()) as AttachmentListResponse
-  } catch {
-    return undefined
+    if (!response.ok) {
+      const body = (await response.json().catch(() => undefined)) as RouteFailureBody | undefined
+      return { ok: false, status: response.status, hint: body?.hint }
+    }
+    return { ok: true, ...((await response.json()) as AttachmentListResponse) }
+  } catch (error) {
+    return { ok: false, status: 0, hint: error instanceof Error ? error.message : undefined }
   }
 }
 
@@ -411,11 +427,12 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
       if (mySeq !== seq.current) return // superseded
       setLoading(false)
       lastLoadedRef.current = Date.now()
-      if (result === undefined) {
+      if (!result.ok) {
         setItems([])
         setTotal(0)
         setTotalBytes(0)
-        setNote('清单不可用（检查 host 或 attachments 服务）')
+        // 服务端 hint 优先：它是唯一能说清「改哪个配置键」的一句话。
+        setNote(result.hint ?? `清单不可用（HTTP ${result.status}；检查 host 与 attachments 服务）`)
         return
       }
       setItems(result.rows)
@@ -458,8 +475,8 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
     try {
       const response = await fetch(`/plugins/dsh-files/attachments/download?ref=${encodeURIComponent(item.ref)}`)
       if (!response.ok) {
-        const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined
-        notify(body?.error ?? (response.status === 413 ? '文件超过下载上限，请改用「导出」' : '读取附件失败'))
+        const body = (await response.json().catch(() => undefined)) as RouteFailureBody | undefined
+        notify(body?.hint ?? body?.error ?? (response.status === 413 ? '超过上限，请改用「导出」' : `读取附件失败（HTTP ${response.status}）`))
         return
       }
       const blob = await response.blob()
@@ -488,14 +505,14 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
         `/plugins/dsh-files/attachments/export?session=${encodeURIComponent(sessionId)}&ref=${encodeURIComponent(item.ref)}`,
         { method: 'POST' }
       )
-      const body = (await response.json()) as { relativePath?: string; error?: string }
+      const body = (await response.json()) as { relativePath?: string } & RouteFailureBody
       if (response.ok && body.relativePath !== undefined) {
         setNote(`已导出到工作区 ${body.relativePath}`)
       } else {
-        setNote(body.error ?? '导出失败')
+        setNote(body.hint ?? body.error ?? `导出失败（HTTP ${response.status}）`)
       }
-    } catch {
-      setNote('导出失败')
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : '导出失败')
     }
   }
 

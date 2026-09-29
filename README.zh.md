@@ -75,6 +75,20 @@ harness 0.1.3 的原生上传把文件存为字节对象，模型拿到一行 ha
   <img src="assets/composer.png" alt="输入区与附件库：上传文件夹在官方 + 菜单中（截图为 0.5.3 之前界面，待重摄）" width="820">
 </p>
 
+### 边界：与宿主原生能力的分工
+
+宿主自身的文档能力在持续变强，插件只保留宿主给不了的那一半——**模型侧的结构化文本**：
+
+| 能力 | 宿主原生 | dsh-files |
+| --- | --- | --- |
+| 文件上传/图片管线/`@file` 引用 | ✅ 唯一入口（本插件不再实现） | 不涉及 |
+| 文档**预览**（Office → PDF、侧边栏文档预览） | ✅ 已有 | 不涉及 |
+| 文档**文本**进模型（PDF/DOC/DOCX/XLSX 结构化提取、编码回退、分页、sheet 级） | ❌ 内置 read 对二进制报 `FS_NOT_TEXT` | ✅ `read_document` |
+| 附件库对**模型**可见、可导出 | ❌ 只进不出、模型零可见 | ✅ `attachment_list` / `export_attachment` |
+| 附件库对**用户**可见、可下载回本机 | ❌ | ✅ 面板 + 下载/导出路由 |
+
+判据很简单：**「给人看的」交给宿主，「给模型读的」才是本插件的职责**。两者不重叠，所以原生预览出现后 `read_document` 依然必要——预览到 PDF 不等于模型能读到正文。
+
 ## 能力
 
 - **内容嗅探**：PDF 头 / OLE Compound File（Word 97-2003）/ ZIP 中央目录成员 / UTF-8（fatal）/ UTF-16 BOM / GB18030，全部从字节判定，扩展名伪装（exe 改 .pdf）一律拒绝；格式 hint 仅作字节完全未知时的兜底
@@ -92,6 +106,7 @@ harness 0.1.3 的原生上传把文件存为字节对象，模型拿到一行 ha
 - **输出呈现**：text 结果投影为官方 `card: 'read'` 读文件卡片；解析走 `ctx.fs`，继承会话沙箱与 fs 观察策略
 /`.~`）、点开头隐藏文件（`.DS_Store`/`.env`）、系统文件在进入官方管线前跳过，跳过数量对用户明示
 - **阅读克制**：systemPrompt 引导「先探结构、再精准读、读够就停」
+- **失败可自救**：附件路由的每个失败响应除机器可读 `error` 码外，附 `hint`（可照做的一步）与 `detail`（现场数值）——403 会原样给出待放行的 authority 与 `trustedHosts` 写法，413 会给出实际大小、上限与要改的配置键，面板与控制台都会展示，不再只抛裸错误码
 
 ## 安装
 
@@ -115,9 +130,16 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 | dsh-files | Harness | 说明 |
 | --- | --- | --- |
-| 0.5.3 | 0.1.7-alpha.1（已验证） | 当前版。`@deepseek-ai/dsh-fs/dsh-tools/dsh-client-ui-primitives` 锁定 `0.1.7-alpha.1`；客户端图标跟随宿主 `Regular/Medium` 命名。 |
+| 0.5.3 | 0.1.7-alpha.1；**0.2.0-rc.2（实测通过）** | 当前版。`@deepseek-ai/dsh-fs/dsh-tools/dsh-client-ui-primitives` 锁定 `0.1.7-alpha.1`；客户端图标跟随宿主 `Regular/Medium` 命名。 |
 | 0.5.x | ≥ 0.1.3-alpha.1 | 旧 SDK pin（`0.1.0-rc.x`）；附件面板与 `@` 源早于宿主 `conversation.composer.dock` 槽位。 |
 | 0.6.x | — | 从未发布（已并入 0.5.2/0.5.3），请勿使用。 |
+
+0.2.0-rc.2 上的实测范围与结论（2026-09-29，本机 `web` profile）：
+
+- 路由与站内接缝仍成立：`conversation.input.left` / `conversation.composer.dock` / `@` 源、`commandUi` 菜单贡献、`dsh-client-ui-primitives` 图标在官方浏览器名册中均可解析
+- 附件库磁盘布局未变（`files/<sha2>/<sha>/<原名>`），对真实库实测清单可读；`AttachmentStore.readFileStream` 与 `llm.fileRequestText` 接缝未变
+- 宿主插件契约的改动是**加法**：`dsh-tools` 0.2.0 只新增可选成员（如 `ToolDefinition.projectContent?`、`PreToolDecision.ask.displayReason?`），无破坏性变更
+- 单一反例值得记下：`@deepseek-ai/dsh-client-runtime` 是**独立行**（不是种子模块），插件 `dsh.client.inject` 里声明它要求宿主名册存在该行——官方 0.2.0 名册已移除该行，声明它的客户端插件会整树加载失败。dsh-files 不声明它，故不受影响
 
 本插件跟随维护者本地运行的 `alpha` 线（`0.1.7-alpha.1`）；npm `latest`（撰写时为 `0.1.5-rc.3`）反而更旧，请用上面的 git 方式安装，勿用仓库版本。
 
@@ -138,6 +160,53 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
     maxDownloadBytes: 209715200   # 单次附件下载/导出字节上限（超限 413）
     trustedHosts: []              # 非回环 host[:port] 授权；LAN/域名部署必配（语义同官方 --trusted-host）
 ```
+
+## 远程 / LAN 部署
+
+附件库路由有 Host 信任栅栏（语义同官方 `--trusted-host`）：**回环部署免配置**，用浏览器打开 `http://127.0.0.1:3080` 就能用。一旦你通过 LAN IP、内网域名或反向代理访问，Host 不再是回环地址，所有附件路由会返回 403——**这是设计行为，不是故障**。
+
+让它工作的唯一一步，是把浏览器地址栏里的 authority 原样写进 `trustedHosts`：
+
+```yaml
+- id: files-toolkit
+  name: 'dsh-files'
+  config:
+    trustedHosts:
+      - '192.168.1.20:3080'   # 带端口 = 精确匹配该端口
+      - 'dsh.example.com'     # 裸主机名 = 该主机的任意端口
+```
+
+不用猜：**403 响应体会把被拒的 authority 原样写进 `hint`，照抄即可**。响应形状：
+
+```json
+{
+  "error": "host-not-trusted",
+  "hint": "Browser host \"dsh.example.com:8443\" is not loopback and not in trustedHosts. … trustedHosts: [\"dsh.example.com:8443\"].",
+  "docs": "https://github.com/taxueseek/dsh-files#configuration",
+  "detail": { "host": "dsh.example.com:8443", "trustedHosts": ["dsh.example.com:3080"] }
+}
+```
+
+`detail.trustedHosts` 是当前白名单，用来一眼看出「服务换端口了」这类失效——最常见的 403 就是这么来的（`dsh.example.com:3080` → `:8443`，裸主机名条目能覆盖，精确 `host:port` 条目不能）。
+
+面板与 `@` 附件源也会显示同一句 `hint`（`@` 源还会在控制台留下带 HTTP 状态码的一行），所以从界面上就能知道该改什么，不必去翻日志。
+
+### 失败响应契约
+
+所有 `/plugins/dsh-files/attachments*` 路由的失败响应都是同一形状：机器可读的 `error` 码 + 可执行的 `hint` + `docs` 锚点 +（有现场数值时）`detail`。
+
+| `error` | HTTP | 含义与下一步 |
+| --- | --- | --- |
+| `host-not-trusted` | 403 | Host 不在回环也不在 `trustedHosts`；`hint` 给出待放行的 authority |
+| `invalid-ref` | 400 | `ref` 必须是 `sha256:<64 位 hex>`，取自清单接口的 `ref` 字段 |
+| `missing-parameters` | 400 | 导出需要同时给 `session` 与 `ref` |
+| `method-not-allowed` | 405 | 导出是 POST 路由；带 `Allow: POST` 头一并返回 |
+| `session-without-workspace` | 400 | 该会话没有工作区目录，无处可导出 |
+| `attachment-not-found` | 404 | 库内无此内容引用；先列清单 |
+| `attachment-object-missing` | 404 | 索引有条目但对象已不在，需重新上传 |
+| `attachment-corrupt` | 409 | 字节未通过完整性校验，重传源文件而非重试传输 |
+| `attachment-too-large` | 413 | 给出实际大小、上限与 `maxDownloadBytes`；也可换另一条传输路径 |
+| `list-failed` / `export-failed` / `attachment-read-failed` | 500 | 附上底层原因与可检查项 |
 
 ## 安全
 

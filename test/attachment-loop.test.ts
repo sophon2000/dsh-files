@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { isTrustedRequest } from '../src/attachments/fence.ts'
 import { normalizeAttachmentRef, shaOf, sanitizeDownloadName, sanitizeFileNameForPath } from '../src/attachments/ref.ts'
-import { handleText, pageOf } from '../src/attachment-loop.ts'
+import { failurePayload, handleText, hostNotTrustedPayload, pageOf, registerAttachmentRoutes, tooLargePayload } from '../src/attachment-loop.ts'
 
 const SHA = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 
@@ -35,6 +35,128 @@ test('missing Host header is denied', () => {
 
 test('same host, different name is denied (DNS rebinding shape)', () => {
   assert.equal(isTrustedRequest({ headers: { host: 'dsh.example.com.evil.com' } }, ['dsh.example.com']), false)
+})
+
+// ---------------- route-level: the fence really uses the actionable body ----------------
+
+/** Minimal route-recording webServer stub: capture handlers, build fake req/res. */
+function recordingServer() {
+  const routes = new Map<string, (req: unknown, res: unknown) => void | Promise<void>>()
+  const webServer = {
+    register(route: { path: string; handler: (req: never, res: never) => void | Promise<void> }) {
+      routes.set(route.path, route.handler as (req: unknown, res: unknown) => void | Promise<void>)
+      return () => routes.delete(route.path)
+    }
+  }
+  const call = async (path: string, headers: Record<string, string>) => {
+    const handler = routes.get(path)
+    assert.ok(handler !== undefined, `route ${path} must be registered`)
+    let status = 0
+    let body = ''
+    const res = {
+      writeHead(code: number) { status = code; return res },
+      end(chunk?: string) { if (chunk !== undefined) body += chunk; return res },
+      // 未授权分支必须在写出任何字节前收口（无 headersSent、无流式写入）
+      write() { throw new Error('fence must not write a body stream on 403') },
+      once() { return res },
+      destroy() {}
+    }
+    await handler({ url: path, method: 'GET', headers }, res)
+    return { status, body: body === '' ? undefined : JSON.parse(body) as Record<string, unknown> }
+  }
+  return { webServer, call }
+}
+
+test('403 from the real fence names the authority and the config key (not a bare "forbidden")', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: ['dsh.example.com:3080'] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments', { host: 'dsh.example.com:8443' })
+  assert.equal(status, 403)
+  assert.equal(body?.error, 'host-not-trusted')
+  assert.ok(String(body?.hint).includes('"dsh.example.com:8443"'), String(body?.hint))
+  assert.deepEqual((body?.detail as { trustedHosts?: unknown })?.trustedHosts, ['dsh.example.com:3080'])
+})
+
+test('the export route answers a wrong method with the same contract, not a bare 405', async () => {
+  const { webServer, call } = recordingServer()
+  const streams: Uint8Array[] = []
+  registerAttachmentRoutes(
+    { webServer },
+    { attachments: { async *readFileStream() { streams.push(new Uint8Array()) } }, sessions: { get: () => undefined } },
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments/export', { host: '127.0.0.1:3080' })
+  assert.equal(status, 405)
+  assert.equal(body?.error, 'method-not-allowed')
+  assert.ok(String(body?.hint).includes('POST'), String(body?.hint))
+  // 绝不能因为方法错就去碰附件存储
+  assert.equal(streams.length, 0)
+})
+
+test('loopback reaches the list handler and is never answered by the fence', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status } = await call('/plugins/dsh-files/attachments', { host: '127.0.0.1:3080' })
+  // 目录不存在按空清单处理，故不是 403——证明围栏放行
+  assert.equal(status, 200)
+})
+
+// ---------------- failure payloads (自我诊断) ----------------
+
+test('every route failure carries a code, an actionable hint and the docs anchor', () => {
+  for (const payload of [
+    failurePayload('x', 'do this'),
+    hostNotTrustedPayload('dsh.example.com:3080', []),
+    tooLargePayload('download', 'a.pdf', 300, 200)
+  ]) {
+    assert.equal(typeof payload.error, 'string')
+    assert.ok(payload.error.length > 0)
+    assert.ok(payload.hint.length > 0, payload.error)
+    assert.match(payload.docs, /#configuration$/)
+  }
+})
+
+test('the 403 body names the rejected authority so it can be copy-pasted into trustedHosts', () => {
+  const payload = hostNotTrustedPayload('dsh.example.com:8443', ['dsh.example.com:3080'])
+  assert.equal(payload.error, 'host-not-trusted')
+  // 可照做：hint 里必须出现原样引用待放行的 authority
+  assert.ok(payload.hint.includes('"dsh.example.com:8443"'), payload.hint)
+  assert.ok(payload.hint.includes('trustedHosts'), payload.hint)
+  // 并给出当前白名单，便于看出「端口搬了」这一类失效
+  assert.deepEqual(payload.detail?.trustedHosts, ['dsh.example.com:3080'])
+})
+
+test('a missing Host header is reported honestly, not as an empty authority', () => {
+  assert.equal(hostNotTrustedPayload('(missing)', []).detail?.host, '(missing)')
+})
+
+test('the 413 body states real size, cap and the config key to raise', () => {
+  const payload = tooLargePayload('export', '《长文档》.pdf', 300 * 1024 * 1024, 200 * 1024 * 1024)
+  assert.equal(payload.error, 'attachment-too-large')
+  assert.equal(payload.detail?.maxDownloadBytes, 200 * 1024 * 1024)
+  assert.ok(payload.hint.includes('300.0 MB'), payload.hint)
+  assert.ok(payload.hint.includes('200.0 MB'), payload.hint)
+  assert.ok(payload.hint.includes('maxDownloadBytes'), payload.hint)
+  // 中文名照原样带出，便于用户对上号
+  assert.ok(payload.hint.includes('《长文档》.pdf'), payload.hint)
+})
+
+test('413 hint names the path that actually failed (export vs download)', () => {
+  assert.ok(tooLargePayload('export', 'a.bin', 2, 1).hint.includes('export cap'))
+  assert.ok(tooLargePayload('download', 'a.bin', 2, 1).hint.includes('download cap'))
+})
+
+test('an unknown attachment name still yields a readable 413 sentence', () => {
+  const payload = tooLargePayload('download', undefined, 2, 1)
+  assert.ok(payload.hint.startsWith('This attachment is'), payload.hint)
 })
 
 // ---------------- reference normalization ----------------

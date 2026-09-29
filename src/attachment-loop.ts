@@ -56,6 +56,64 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
+// ---- 失败可自救（0.5.4 普适性）---------------------------------------------
+// 未知用户（LAN/域名部署、把服务放到反代后、附件超过上限）此前只拿到裸错误码，
+// 无法判断「该改哪个配置键」。这些响应体在保留机器可读 error 码的同时附
+// `hint`（可执行的一步）与 `detail`（现场数值），面板与 curl 都能直接照做。
+// 文案英文单语：消费者是部署者 A（配置）与部署者 B（客户端提示），不随界面语言变。
+
+const DOCS_URL = 'https://github.com/taxueseek/dsh-files#configuration'
+
+/** One route failure: machine-readable code plus an actionable hint. */
+export interface RouteFailure {
+  error: string
+  hint: string
+  docs: string
+  detail?: Record<string, unknown>
+}
+
+export function failurePayload(
+  error: string,
+  hint: string,
+  detail?: Record<string, unknown>
+): RouteFailure {
+  return detail === undefined
+    ? { error, hint, docs: DOCS_URL }
+    : { error, hint, docs: DOCS_URL, detail }
+}
+
+/**
+ * 403 body for the browser-trust fence. `host` is the rejected `Host` value
+ * verbatim, so the operator can copy it straight into `trustedHosts`; the
+ * detail also carries the current allow-list, because the usual failure is a
+ * port mismatch after the deployment moved (dsh.example.com:3080 → :8443).
+ */
+export function hostNotTrustedPayload(
+  host: string,
+  trustedHosts: readonly string[]
+): RouteFailure {
+  return failurePayload(
+    'host-not-trusted',
+    `Browser host "${host}" is not loopback and not in trustedHosts. Add it to the plugin config (same semantics as the host's --trusted-host): trustedHosts: [${JSON.stringify(host)}]. Loopback deployments need no configuration.`,
+    { host, trustedHosts: [...trustedHosts] }
+  )
+}
+
+/** 413 body: the exact size/cap so "how much smaller" needs no guessing. */
+export function tooLargePayload(
+  action: 'download' | 'export',
+  name: string | undefined,
+  size: number,
+  cap: number
+): RouteFailure {
+  const who = name === undefined ? 'This attachment' : `"${name}"`
+  return failurePayload(
+    'attachment-too-large',
+    `${who} is ${formatBytes(size)} but the ${action} cap is ${formatBytes(cap)}. Raise maxDownloadBytes in the plugin config, or use the other transfer path (download keeps the file on the client, export writes it into the session workspace).`,
+    { name, size, bytes: size, cap, maxDownloadBytes: cap, action }
+  )
+}
+
 /** 标准查询串解析（URLSearchParams 语义，`+` 即空格）。手写 indexOf 切分
  * 虽然当前恰好安全（先切分后解码），但语义分歧埋在未来；标准库三行替代。 */
 function queryParam(url: string | undefined, name: string): string | undefined {
@@ -169,7 +227,8 @@ export function registerAttachmentRoutes(
 ): void {
   const fence = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (isTrustedRequest({ headers: req.headers as { host?: string } }, config.trustedHosts)) return true
-    json(res, 403, { error: 'forbidden' })
+    const authority = req.headers.host
+    json(res, 403, hostNotTrustedPayload(typeof authority === 'string' ? authority : '(missing)', config.trustedHosts))
     return false
   }
   const queryInt = (url: string | undefined, name: string, fallback: number, max: number): number => {
@@ -206,7 +265,10 @@ export function registerAttachmentRoutes(
         })
         json(res, 200, { rows, total: page.total, totalBytes: page.totalBytes })
       } catch (error) {
-        json(res, 500, { error: error instanceof Error ? error.message : 'list failed' })
+        json(res, 500, failurePayload(
+          'list-failed',
+          `The attachment library at ${config.attachmentsDir} could not be read. Check that the directory exists and is readable, or point attachmentsDir at the real library root. Reason: ${error instanceof Error ? error.message : 'unknown error'}`
+        ))
       }
     }
   })
@@ -222,16 +284,22 @@ export function registerAttachmentRoutes(
         const ref = queryParam(req.url, 'ref')
         const normalized = ref === undefined ? undefined : normalizeAttachmentRef(ref)
         if (normalized === undefined) {
-          json(res, 400, { error: 'invalid ref' })
+          json(res, 400, failurePayload(
+            'invalid-ref',
+            'The ref query parameter must be a content reference of the form sha256:<64 hex digits>, exactly as returned in the "ref" field of GET /plugins/dsh-files/attachments.'
+          ))
           return
         }
         const entry = await findEntry(config, normalized)
         if (entry === undefined) {
-          json(res, 404, { error: 'attachment not found' })
+          json(res, 404, failurePayload(
+            'attachment-not-found',
+            'No attachment in the library carries that content reference. List them first with GET /plugins/dsh-files/attachments and use its "ref" field.'
+          ))
           return
         }
         if (entry.bytes > config.maxDownloadBytes) {
-          json(res, 413, { error: 'attachment exceeds the download cap', size: entry.bytes })
+          json(res, 413, tooLargePayload('download', entry.name, entry.bytes, config.maxDownloadBytes))
           return
         }
         const filename = sanitizeDownloadName(entry.name)
@@ -263,9 +331,22 @@ export function registerAttachmentRoutes(
             return
           }
           const code = (error as { code?: string }).code
-          if (code === 'ATTACHMENT_NOT_FOUND') json(res, 404, { error: 'attachment object missing' })
-          else if (code === 'ATTACHMENT_CORRUPT') json(res, 409, { error: 'attachment integrity check failed' })
-          else json(res, 500, { error: 'attachment read failed' })
+          if (code === 'ATTACHMENT_NOT_FOUND') {
+            json(res, 404, failurePayload(
+              'attachment-object-missing',
+              'The library index lists this attachment but its stored object is gone. Re-upload the file, or export a different one.'
+            ))
+          } else if (code === 'ATTACHMENT_CORRUPT') {
+            json(res, 409, failurePayload(
+              'attachment-corrupt',
+              'The stored bytes failed the content-integrity check, so the object is damaged. Re-upload the source file instead of retrying this transfer.'
+            ))
+          } else {
+            json(res, 500, failurePayload(
+              'attachment-read-failed',
+              'The attachment store could not stream these bytes. Retry once; if it persists, export to the workspace instead of downloading.'
+            ))
+          }
         }
       }
     })
@@ -282,8 +363,12 @@ export function registerAttachmentRoutes(
       handler: async (req, res) => {
         if (!fence(req, res)) return
         if (req.method !== 'POST') {
-          res.writeHead(405, { allow: 'POST' })
-          res.end()
+          // 405 也走同一失败契约：裸 405 对调用方没有任何可照做的信息。
+          res.writeHead(405, { allow: 'POST', 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+          res.end(JSON.stringify(failurePayload(
+            'method-not-allowed',
+            'Export is a POST route. Send the same URL with -X POST (the panel does this for you); a GET never exports.'
+          )))
           return
         }
         const url = req.url ?? ''
@@ -291,29 +376,41 @@ export function registerAttachmentRoutes(
         const ref = queryParam(url, 'ref')
         const normalized = ref === undefined ? undefined : normalizeAttachmentRef(ref)
         if (sessionId === undefined || normalized === undefined) {
-          json(res, 400, { error: 'session and ref are required' })
+          json(res, 400, failurePayload(
+            'missing-parameters',
+            'Export needs both query parameters: session=<session id> and ref=sha256:<64 hex digits>. The panel supplies them; a manual call must pass both.'
+          ))
           return
         }
         const entry = await findEntry(config, normalized)
         if (entry === undefined) {
-          json(res, 404, { error: 'attachment not found' })
+          json(res, 404, failurePayload(
+            'attachment-not-found',
+            'No attachment in the library carries that content reference. List them first with GET /plugins/dsh-files/attachments and use its "ref" field.'
+          ))
           return
         }
         if (entry.bytes > config.maxDownloadBytes) {
-          json(res, 413, { error: 'attachment exceeds the export cap', size: entry.bytes })
+          json(res, 413, tooLargePayload('export', entry.name, entry.bytes, config.maxDownloadBytes))
           return
         }
         const session = sessions.get(sessionId)
         const cwd = session?.header?.cwd
         if (typeof cwd !== 'string' || cwd === '') {
-          json(res, 400, { error: 'session has no workspace cwd' })
+          json(res, 400, failurePayload(
+            'session-without-workspace',
+            'That session has no workspace directory, so there is nowhere to export into. Open a session bound to a workspace (or set one for this session) and retry.'
+          ))
           return
         }
         try {
           const relativePath = await exportToWorkspace(config, attachments, entry, cwd)
           json(res, 200, { relativePath })
         } catch (error) {
-          json(res, 500, { error: error instanceof Error ? error.message : 'export failed' })
+          json(res, 500, failurePayload(
+            'export-failed',
+            `The attachment could not be written into the session workspace. Check that the workspace directory is writable. Reason: ${error instanceof Error ? error.message : 'unknown error'}`
+          ))
         }
       }
     })

@@ -75,6 +75,20 @@ Native upload in harness 0.1.3 stores files as byte objects and hands the model 
   <img src="assets/composer.png" alt="Composer: folder upload lives in the official \"+" command menu (screenshot predates 0.5.3, to be re-shot)" width="820">
 </p>
 
+### Scope: how this divides work with the host
+
+The host keeps growing its own document surface; this plugin keeps only the half the host cannot supply — **structured text for the model**:
+
+| Capability | Host native | dsh-files |
+| --- | --- | --- |
+| File upload / image pipeline / `@file` reference | ✅ the only entry point (removed here) | n/a |
+| Document **preview** (Office → PDF, sidebar document preview) | ✅ shipped | n/a |
+| Document **text** into the model (PDF/DOC/DOCX/XLSX extraction, encoding fallback, paging, per-sheet) | ❌ the built-in read answers `FS_NOT_TEXT` for binaries | ✅ `read_document` |
+| Library visible/exportable to the **model** | ❌ write-only, no model visibility | ✅ `attachment_list` / `export_attachment` |
+| Library visible/downloadable to the **user** | ❌ | ✅ panel + download/export routes |
+
+The rule is short: **anything a human looks at belongs to the host; feeding the model is this plugin's job.** The two do not overlap, so `read_document` stays necessary even with native preview — rendering to PDF is not the same as the model reading the prose.
+
 ## Capabilities
 
 - **Content sniffing**: PDF header / OLE Compound File (Word 97-2003) / ZIP central-directory members / UTF-8 (fatal) / UTF-16 BOM / GB18030 — decided from bytes, never from extensions; disguised files (an exe renamed .pdf) are rejected. The format hint is only a last resort when bytes are fully unknown
@@ -92,6 +106,7 @@ Native upload in harness 0.1.3 stores files as byte objects and hands the model 
 - **Output projection**: text results project onto the official `card: 'read'` file card; reads go through `ctx.fs` and inherit session sandbox and fs-observation policy
 /`.~`), dotfiles (`.DS_Store`/`.env`) and OS system files are skipped before the official pipeline, with the skipped count shown to the user
 - **Reading restraint**: the systemPrompt section instructs "probe structure first, read precisely, stop when you have enough"
+- **Self-diagnosing failures**: every attachment-route failure carries an actionable `hint` and a `detail` payload beside its machine-readable `error` code — a 403 hands you the rejected authority and the exact `trustedHosts` line, a 413 hands you the real size, the cap and the config key to raise. The panel and the console surface the same sentence, so no deployment ever answers with a bare error code
 
 ## Install
 
@@ -115,11 +130,18 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 | dsh-files | Harness | Notes |
 | --- | --- | --- |
-| 0.5.3 | 0.1.7-alpha.1 (verified) | Current. Pins `@deepseek-ai/dsh-fs/dsh-tools/dsh-client-ui-primitives` at `0.1.7-alpha.1`; client icons follow the host's `Regular/Medium` naming. |
+| 0.5.3 | 0.1.7-alpha.1; **0.2.0-rc.2 (measured)** | Current. Pins `@deepseek-ai/dsh-fs/dsh-tools/dsh-client-ui-primitives` at `0.1.7-alpha.1`; client icons follow the host's `Regular/Medium` naming. |
 | 0.5.x | ≥ 0.1.3-alpha.1 | Older SDK pins (`0.1.0-rc.x`); attachment dock and `@` source predate the host's `conversation.composer.dock` slot. |
 | 0.6.x | — | Never released (folded into 0.5.2/0.5.3); do not use. |
 
 The plugin targets the `alpha` line the maintainer runs locally (`0.1.7-alpha.1`); npm `latest` (`0.1.5-rc.3` at the time of writing) is older, so prefer the git install above over any registry version.
+
+What was actually checked on 0.2.0-rc.2 (2026-09-29, `web` profile) and what it means:
+
+- **Surfaces still resolve**: `conversation.input.left`, `conversation.composer.dock`, the `@` source, the `commandUi` menu contribution and every `dsh-client-ui-primitives` icon used here exist in the official browser roster.
+- **Attachment-store layout is unchanged** (`files/<sha2>/<sha>/<name>`); the library scan reads the real store, and the `AttachmentStore.readFileStream` / `llm.fileRequestText` seams are unchanged.
+- **The host plugin contract only grew**: `dsh-tools` 0.2.0 adds optional members (`ToolDefinition.projectContent?`, `PreToolDecision.ask.displayReason?`); nothing the plugin relies on was removed.
+- **One counter-example worth remembering**: `@deepseek-ai/dsh-client-runtime` is a *row*, not a seed module. Declaring it in `dsh.client.inject` requires the host roster to carry that row; the official 0.2.0 roster dropped it, so a client half that declares it fails to load and takes the whole web boot with it. dsh-files does not declare it and is unaffected.
 
 ## Configuration
 
@@ -138,6 +160,53 @@ The plugin targets the `alpha` line the maintainer runs locally (`0.1.7-alpha.1`
     maxDownloadBytes: 209715200   # per-download/export byte cap (answers 413)
     trustedHosts: []              # non-loopback host[:port] authorities; required for LAN/domain (same semantics as --trusted-host)
 ```
+
+## Remote / LAN deployment
+
+The attachment routes are fenced on the `Host` header (same semantics as the host's `--trusted-host`). **A loopback deployment needs no configuration** — opening `http://127.0.0.1:3080` in a browser just works. The moment you reach the server through a LAN address, an internal hostname, or a reverse proxy, the `Host` is no longer loopback and every attachment route answers 403. **That is the fence working, not a fault.**
+
+The only step to make it work is to put the authority from your browser's address bar into `trustedHosts` verbatim:
+
+```yaml
+- id: files-toolkit
+  name: 'dsh-files'
+  config:
+    trustedHosts:
+      - '192.168.1.20:3080'   # host:port matches that exact port
+      - 'dsh.example.com'     # a bare host matches any port on that host
+```
+
+You do not have to guess: **the 403 body prints the rejected authority verbatim in its `hint`, ready to copy.** The shape is:
+
+```json
+{
+  "error": "host-not-trusted",
+  "hint": "Browser host \"dsh.example.com:8443\" is not loopback and not in trustedHosts. … trustedHosts: [\"dsh.example.com:8443\"].",
+  "docs": "https://github.com/taxueseek/dsh-files#configuration",
+  "detail": { "host": "dsh.example.com:8443", "trustedHosts": ["dsh.example.com:3080"] }
+}
+```
+
+`detail.trustedHosts` is the current allow-list, which is how you spot the most common cause of a 403 in one glance: the deployment moved ports (`:3080` → `:8443`). A bare-hostname entry absorbs that; an exact `host:port` entry does not.
+
+The panel and the `@` attachment source surface the same `hint` (the `@` source also logs one line with the HTTP status), so the interface itself tells you what to change — no log digging.
+
+### Failure response contract
+
+Every failure from `/plugins/dsh-files/attachments*` has the same shape: a machine-readable `error` code, an actionable `hint`, a `docs` anchor, and (when there are live numbers) a `detail` payload.
+
+| `error` | HTTP | Meaning and next step |
+| --- | --- | --- |
+| `host-not-trusted` | 403 | Host is neither loopback nor in `trustedHosts`; the `hint` carries the authority to allow |
+| `invalid-ref` | 400 | `ref` must be `sha256:<64 hex>`, taken from the list route's `ref` field |
+| `missing-parameters` | 400 | Export needs both `session` and `ref` |
+| `method-not-allowed` | 405 | Export is a POST route; returns the `Allow: POST` header too |
+| `session-without-workspace` | 400 | That session has no workspace directory to export into |
+| `attachment-not-found` | 404 | No such content reference in the library; list it first |
+| `attachment-object-missing` | 404 | The index lists it but the object is gone; re-upload |
+| `attachment-corrupt` | 409 | Bytes failed the integrity check; re-upload the source rather than retrying |
+| `attachment-too-large` | 413 | Reports real size, cap and `maxDownloadBytes`; the other transfer path may still work |
+| `list-failed` / `export-failed` / `attachment-read-failed` | 500 | Carries the underlying reason and what to check |
 
 ## Security
 

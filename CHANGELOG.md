@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.4
+
+### 失败可自救 + 边界声明（未知使用需求的普适性）
+
+驱动问题重新定义为两句：**兼容**（任何宿主版本下装得上、不误报、不必追着改）与**普适**（未知用户的未知用法下退得优雅、能自救）。本轮只做后者中成本最低、收益最直接的一块——**把「失败」从裸错误码变成可照做的下一步**，并把与官方原生能力的边界写清楚。
+
+- **失败响应契约（服务端）**：`/plugins/dsh-files/attachments*` 的每个失败响应改为 `{ error, hint, docs, detail? }` 四段式。`error` 保持机器可读（面板与脚本按码分支不变），`hint` 是**一句可执行的话**，`detail` 带现场数值。
+  - **403（最重要）**：此前只回 `{"error":"forbidden"}`，LAN/反代部署者无法判断该改什么。现在回 `host-not-trusted`，`hint` 里**原样引用被拒的 authority** 并给出 `trustedHosts: ["dsh.example.com:8443"]` 写法；`detail.trustedHosts` 同时给出当前白名单，一眼看出「服务换端口了」这类失效（裸主机名条目能覆盖，精确 `host:port` 条目不能）。Host 头缺失时如实报 `(missing)`，不伪装成空串。
+  - **413**：给出实际大小、上限与要改的 `maxDownloadBytes`，并点明「另一条传输路径仍可用」（下载留在客户端，导出写进工作区）。
+  - 400/404/409/500 各给出针对性一步：`invalid-ref` 指明 `sha256:<64hex>` 与取值字段；`session-without-workspace` 指明「该会话没有工作区目录」；`attachment-corrupt` 指明「重传源文件而非重试传输」；500 附底层原因与可检查项。403 的编码刻意与宿主 `--trusted-host` 同义命名，便于面板按码分支。
+  - **405 不再是裸响应**：导出路由收到非 POST 时，原先只回一个空体 + `Allow` 头（对调用方零信息）。现补 `method-not-allowed` 契约体，并**在触碰附件存储之前**收口（路由级用例断言 `readFileStream` 零调用）。
+- **失败响应上浮到界面（客户端）**：`fetchAttachments` 从「失败即 `undefined`」改为返回判别式结果（`{ok:false,status,hint}`），面板 `note`、下载 `notify`、导出 `note` 与 `@` 源控制台日志全部**优先展示服务端 hint**；`@` 源在路由被拒时留下带 HTTP 状态码的一行，区分「没附件」「服务没接上」「host 未授权」三种此前无法区分的静默失败。
+- **README 双语补「远程 / LAN 部署」一节**：回环免配置、什么情况下必然 403、`trustedHosts` 两种写法的匹配语义差异，以及 403 JSON 的完整形状——用户不必读日志就能改对。
+- **README 双语补「边界：与宿主原生能力的分工」**：宿主原生上传/图片/`@file`、以及 0.2.0 新增的原生文档**预览**（Office → PDF、侧边栏预览）都明确划归宿主；插件只保留宿主给不了的一半——文档**文本**进模型、附件库对模型可见可导出、附件库对用户可下载。判据一句话：**给人看的交给宿主，给模型读的才是本插件的职责**；原生预览不等于模型能读到正文，故 `read_document` 依然必要。
+- **版本支持表补 0.2.0-rc.2 实测结论**：站内接缝（`conversation.input.left` / `composer.dock` / `@` 源 / `commandUi` / ui-primitives 图标）均可解析；附件库磁盘布局与 `AttachmentStore.readFileStream` / `llm.fileRequestText` 接缝未变；宿主插件契约是加法（`dsh-tools` 0.2.0 仅新增可选成员）。并记录一个反例：`@deepseek-ai/dsh-client-runtime` 是**独立行**而非种子模块，官方 0.2.0 名册已移除它，声明它的客户端插件会整树加载失败——dsh-files 不声明，故不受影响。
+
+### 测试与工程
+
+- 新增 9 项单测（91 → 100）：失败体四段式不变量（`error`/`hint`/`docs` 必在）、403 必须原样带出被拒 authority 且附当前白名单、Host 缺失的诚实表示、413 的真实大小/上限/配置键/中文名保真、导出与下载两条路径的文案区分、405 契约体且不触碰存储，以及**路由级**验证（用最小 `webServer` 桩捕获 handler，断言真实围栏回的是可自救体而非裸 `forbidden`；403 分支不得写出任何字节）。
+- 新用例已验证「有牙」：把围栏改回 `{"error":"forbidden"}` → 路由级用例变红（27 pass / 1 fail），恢复后全绿。
+- 依赖零新增；`npm test`（双 tsconfig typecheck + 单测）**100/100 全绿**。
+- **真机验收**（本机 `host web`，0.2.0-rc.2，独立端口 19388，验收后已停）：启动日志打印 `[dsh-files] attachment loop routes registered`；回环 Host 列库返回 13 条真实附件且 `handle` 字段可用；非回环 Host `dsh.example.com:8443` 回 **403 + 可照做的 hint**（原样给出 `trustedHosts: ["dsh.example.com:8443"]`）；`download` 真实附件 200 且字节数（209,445）与 sha256 **与库内对象逐字节一致**；`invalid-ref` / `attachment-not-found` / `missing-parameters` / `session-without-workspace` / `method-not-allowed` 五条失败路径均返回带 hint 的契约体；405 仍带 `Allow: POST`。
+- 客户端 bundle 体积口径纠偏：0.5.1 起对外声称的「13.4 KB」与当前工具链产出的构建物**对不上**——HEAD 版 `lib/client.js` 实测 17,351 字节（折合 17.4 kB），本次改动净增 388 字节 → 17,739 字节（gzip 6,462 字节）。此处以实测替换声明值，避免体积口径继续空转；声明值与产物的偏差原因（esbuild 版本或历史测量口径）未追溯。
+
 ## 0.5.3
 
 ### 「上传文件夹」双入口：工具行按钮回归 + 官方 + 菜单（用户面）

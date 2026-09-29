@@ -132,7 +132,14 @@ function registerAttachmentSource(ctx: {
       // @ 引用只插路径的契约不同，附件不在工作区，模型识别的就是 handle 行。
       candidates: async () => {
         const result = await fetchAttachments()
-        if (result === undefined) return []
+        // 路由失败（含 403 未授权 host）与「库里没附件」是两件事：前者在
+        // 控制台留下服务端 hint，未知部署者据此知道该改哪个配置键。
+        if (!result.ok) {
+          if (result.status !== 0) {
+            console.warn(`[dsh-files] @ 附件源不可用（HTTP ${result.status}）：${result.hint ?? '无 hint'}`)
+          }
+          return []
+        }
         // 库内有附件却全部缺 handle = llm 服务缺席，@ 组会静默消失——
         // 留一条可诊断日志，区分「没附件」和「服务没接上」。
         if (result.rows.length > 0 && result.rows.every((row) => row.handle === undefined || row.handle === '')) {
