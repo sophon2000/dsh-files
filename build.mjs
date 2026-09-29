@@ -6,21 +6,19 @@ import { readFileSync } from 'node:fs'
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 await build({
-  define: { __FOLDER_UPLOAD_ENABLED__: process.env.DSH_FILES_FOLDER_UPLOAD === '1' ? 'true' : 'false' },
-  entryPoints: [process.env.DSH_FILES_FOLDER_UPLOAD === '1' ? 'src/client/index.tsx' : 'src/client/read-only.ts'],
+  entryPoints: ['src/client/read-only.ts'],
   bundle: true,
   minifySyntax: true,
-  format: 'iife',
+  format: 'cjs',
   platform: 'browser',
   target: ['es2020'],
   outfile: 'lib/client.js',
-  jsx: 'automatic',
   // CHANGELOG 0.5.1 起按 minified 体积口径对外；banner/footer 原样拼接，
   // ModuleLoader 包装不受压缩影响。
   minify: true,
   // External packages are resolved through the factory's `require` at runtime,
   // mirroring how the official client modules load third-party bundles.
-  external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],
+  external: [],
   banner: {
     js: `window.__ModuleLoader__.load({ id: ${JSON.stringify(pkg.name)}, factory: (require) => { var module = { exports: {} }; var exports = module.exports;`
   },

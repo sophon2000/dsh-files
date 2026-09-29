@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.5.3
+## 0.5.3-vh.1
+
+Video Harness qualification release on DSH `0.2.0-rc.1.vh.1`, based on upstream `0.5.3`.
+
+- Absorbs upstream legacy `.doc` extraction, UTF-16 detection fixes and related parser tests.
+- Retains the fork Worker isolation, concurrency gate, ZIP preflight and resource limits.
+- Removes the upstream attachment list/export tools, routes, folder uploader, dock and `@` source from source and packed output. DSH 0.2 and Video Harness Catalog own those surfaces.
+- Ships a no-op client with no injected services or UI dependencies.
+- Pins DSH runtime peers to `0.2.0-rc.1.vh.1`.
+
+## 0.5.3 (upstream)
 
 ### 「上传文件夹」双入口：工具行按钮回归 + 官方 + 菜单（用户面）
 

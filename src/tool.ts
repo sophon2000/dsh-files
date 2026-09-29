@@ -62,7 +62,7 @@ function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): P
   if (limit > config.readLimit) throw new Error(`limit must be less than or equal to ${config.readLimit}`)
   const format = args.format === undefined ? 'auto' : args.format
   if (typeof format !== 'string' || (format !== 'auto' && !SUPPORTED_FORMATS.has(format))) {
-    throw new Error(`unsupported format "${String(format)}" (expected auto, pdf, docx, xlsx or text)`)
+    throw new Error(`unsupported format "${String(format)}" (expected auto, pdf, doc, docx, xlsx or text)`)
   }
   const sheet = args.sheet
   if (sheet !== undefined && (typeof sheet !== 'number' || !Number.isSafeInteger(sheet) || sheet < 1)) {

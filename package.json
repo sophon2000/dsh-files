@@ -1,7 +1,7 @@
 {
   "name": "dsh-files",
-  "version": "0.5.1-vh.4",
-  "description": "DSH read_document fork candidate: bounded, cancellable text/PDF/DOCX/XLSX extraction. Uses native attachments; folder UI disabled in the default build.",
+  "version": "0.5.3-vh.1",
+  "description": "Video Harness qualified read_document plugin for bounded, cancellable text/PDF/DOC/DOCX/XLSX extraction; native DSH owns attachments and file UI.",
   "keywords": [
     "deepseek",
     "harness",
@@ -10,7 +10,8 @@
     "plugin",
     "pdf",
     "docx",
-    "xlsx"
+    "xlsx",
+    "doc"
   ],
   "type": "module",
   "main": "lib/index.js",
@@ -30,9 +31,7 @@
   "license": "MIT",
   "dsh": {
     "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-conversation"
-      ],
+      "inject": [],
       "platform": "web"
     },
     "bundle": {
@@ -43,30 +42,49 @@
     "mammoth": "1.12.2",
     "pdfjs-dist": "4.10.38",
     "read-excel-file": "5.8.8",
+    "word-extractor": "1.0.4",
     "yauzl": "3.4.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.1.vh.2",
-    "@deepseek-ai/dsh-fs": "0.1.7-rc.1.vh.2",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.1.vh.2",
-    "@deepseek-ai/schemastery": "3.18.4",
-    "react": "^18.2.0"
+    "@deepseek-ai/dsh-fs": "0.2.0-rc.1.vh.1",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.1.vh.1",
+    "@deepseek-ai/schemastery": "3.18.4"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-agent": "https://registry.npmjs.org/@deepseek-ai/dsh-agent/-/dsh-agent-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-brand": "https://registry.npmjs.org/@deepseek-ai/dsh-brand/-/dsh-brand-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-fs": "https://registry.npmjs.org/@deepseek-ai/dsh-fs/-/dsh-fs-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-invariants": "https://registry.npmjs.org/@deepseek-ai/dsh-invariants/-/dsh-invariants-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-llm": "https://registry.npmjs.org/@deepseek-ai/dsh-llm/-/dsh-llm-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-ptc-runtime": "https://registry.npmjs.org/@deepseek-ai/dsh-ptc-runtime/-/dsh-ptc-runtime-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-sandbox": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox/-/dsh-sandbox-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-sandbox-policy": "https://registry.npmjs.org/@deepseek-ai/dsh-sandbox-policy/-/dsh-sandbox-policy-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-scope": "https://registry.npmjs.org/@deepseek-ai/dsh-scope/-/dsh-scope-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-session": "https://registry.npmjs.org/@deepseek-ai/dsh-session/-/dsh-session-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-session-projection": "https://registry.npmjs.org/@deepseek-ai/dsh-session-projection/-/dsh-session-projection-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-system-prompt": "https://registry.npmjs.org/@deepseek-ai/dsh-system-prompt/-/dsh-system-prompt-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-timeout": "https://registry.npmjs.org/@deepseek-ai/dsh-timeout/-/dsh-timeout-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-tools": "https://registry.npmjs.org/@deepseek-ai/dsh-tools/-/dsh-tools-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-typert-protocol": "https://registry.npmjs.org/@deepseek-ai/dsh-typert-protocol/-/dsh-typert-protocol-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-user-approval": "https://registry.npmjs.org/@deepseek-ai/dsh-user-approval/-/dsh-user-approval-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-util-crypto": "https://registry.npmjs.org/@deepseek-ai/dsh-util-crypto/-/dsh-util-crypto-0.2.0-rc.1.tgz",
+    "@deepseek-ai/dsh-util-values": "https://registry.npmjs.org/@deepseek-ai/dsh-util-values/-/dsh-util-values-0.2.0-rc.1.tgz",
+    "@deepseek-ai/schemastery": "3.18.4",
     "@types/node": "^26.2.0",
     "@types/yauzl": "2.10.3",
-    "@types/react": "~18.3.1",
     "esbuild": "^0.24.2",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
     "typescript": "^5.7.2"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node build.mjs",
-    "test": "node --test",
-    "check": "pnpm run build && tsc --noEmit && node --test",
-    "prepublishOnly": "npm run build && npm test"
+    "build": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node build.mjs",
+    "test": "pnpm run typecheck && node --test",
+    "check": "pnpm run build && pnpm test",
+    "prepublishOnly": "npm run build && npm test",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit"
   },
   "allowScripts": {
     "esbuild@0.24.2": true

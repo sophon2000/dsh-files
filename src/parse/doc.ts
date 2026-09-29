@@ -24,6 +24,16 @@ interface Extractor {
   extract(input: Buffer | string): Promise<ExtractorDocument>
 }
 
+function isUsableDocumentText(text: string): boolean {
+  if (text.trim() === '') return false
+  let controls = 0
+  for (const char of text) {
+    const code = char.charCodeAt(0)
+    if ((code < 0x20 && char !== '\n' && char !== '\r' && char !== '\t') || code === 0x7f) controls++
+  }
+  return controls / text.length < 0.05
+}
+
 export async function parseDocViaTextutil(bytes: Uint8Array): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-files-doc-'))
   try {
@@ -52,13 +62,17 @@ export async function parseDoc(bytes: Uint8Array): Promise<string> {
     try {
       const text = await parseDocViaTextutil(bytes)
       // 损坏文件 textutil 以非零退出码失败已被 catch；空输出按失败处理走兜底。
-      if (text.trim() !== '') return text
+      if (isUsableDocumentText(text)) return text
     } catch {
       // fall through to word-extractor
     }
   }
   try {
-    return await parseDocViaWordExtractor(bytes)
+    const text = await parseDocViaWordExtractor(bytes)
+    if (!isUsableDocumentText(text)) {
+      throw new Error('Word document stream is empty, missing or not text')
+    }
+    return text
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     // OLE 容器同时覆盖老式 .xls/.ppt：头部无法区分，路由到这里后解析失败

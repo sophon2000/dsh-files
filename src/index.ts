@@ -1,5 +1,5 @@
 // dsh-files 0.5.0 — a DeepSeek Harness plugin with a single job:
-// the read_document tool. Structured text extraction (PDF/DOCX/XLSX/text)
+// the read_document tool. Structured text extraction (PDF/DOC/DOCX/XLSX/text)
 // for files the built-in read tool rejects with FS_NOT_TEXT.
 //
 // Upload, image pipeline, @ candidates and the composer UI were removed in
@@ -74,7 +74,7 @@ export function apply(ctx: any, config: DocsConfig): void {
   ctx.systemPrompt.section({
     name: 'tool:read-document',
     order: 110,
-    text: 'read_document reads PDF/DOCX/XLSX/text the read tool cannot. For large docs: probe structure first (list_sheets, or a small first window), then page with offset/limit; read only what the task needs, then stop.'
+    text: 'read_document reads PDF/DOC/DOCX/XLSX/text the read tool cannot. For large docs: probe structure first (list_sheets, or a small first window), then page with offset/limit; read only what the task needs, then stop.'
   })
 
   ctx.tools.register(
