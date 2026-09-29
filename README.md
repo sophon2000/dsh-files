@@ -5,12 +5,34 @@
 </div>
 
 <p align="center">
-  <img src="assets/readme/hero.svg" width="100%" alt="dsh-files: folder upload, read what the built-in read cannot, make the attachment store visible.">
+  <img src="assets/readme/hero.svg" width="100%" alt="dsh-files: let the AI read your documents, and make the attachment store browsable both ways.">
 </p>
 
 # dsh-files
 
-A DeepSeek Harness plugin that fills one official gap per stage of a file's session lifecycle:
+## In one line
+
+Let the AI actually read the documents you upload — and let your files come back out.
+
+## The two annoyances it removes
+
+You have probably hit both:
+
+- You hand the AI a **contract PDF** or a **spreadsheet**, and it says "I can't read this file." The file is fine — the built-in read tool **only accepts plain text** and refuses binary content outright.
+- You want the AI to look at **that attachment you uploaded days ago**, but the attachment store is write-only: you cannot browse it, and you cannot pull the file back onto your machine.
+
+dsh-files fills exactly those two holes. **Read**: the AI gets the text out of PDF / Word / Excel. **Fetch back**: you and the AI both see what is in the store, and you can pull a file back out.
+
+## What changed in this release
+
+- **Adapted to the latest harness** (measured on 0.2.0-rc.2; the 0.1.7 line still works)
+- **Errors now speak plainly**: a failure used to hand you a cold error code; now it tells you **what to change next**. Reach the server over your LAN and the attachment routes answer 403 — the response prints the exact `trustedHosts` line to add, ready to copy
+- **LAN / domain deployments are documented now**: that section used to be blank, leaving you to guess
+- **The division of work with the host is written down**: what the host already does (upload, images, document preview) versus what remains unique to this plugin — so the wheel is not reinvented
+
+---
+
+Here is a file's **four-stage session lifecycle**, one official gap filled per stage:
 
 - **Ingest**: the **folder button next to the native paperclip** (plus a same-named entry in the official "+" command menu) — the browser flattens the directory (Office lock files, `.DS_Store`, `.env` and other system/hidden files are filtered), and every file enters the official native attachment pipeline
 - **Read**: the **`read_document` tool** — structured text extraction for binary documents (PDF / DOC / DOCX / XLSX) plus enhanced text reading (encoding fallback, paging, sheet-level access)
@@ -46,67 +68,6 @@ Native upload in harness 0.1.3 stores files as byte objects and hands the model 
 - **Attachment library (0.5.3)**: one **official Pill** in the host's `conversation.composer.dock` slot (where the host itself renders session-stats pills) reading `附件库 N · X MB`; clicking expands the card below it: the library list (name/size/short time), **re-insert** (mount a stored file back onto the composer as a fresh official attachment — an old session's upload rides any new session without re-picking from disk), **download** (pull the file to the browser — the right path for remote/LAN use), **export to workspace** (auto-named, collision-safe under `attachments/`) and name search (filtered client-side — no server round-trip per keystroke; the list refetches on re-expand only after 30s). It follows the composer column width; UI data only, zero prompt tokens
 - **`@` attachment source (0.5.2)**: the `@` menu gains an attachment group alongside the host's workspace candidates; picking one inserts the official handle line, so the model sees the same file line it saw at upload
 - **Download/export routes (0.5.2)**: bytes flow through the official `AttachmentStore.readFileStream` (integrity-checked), behind two gates — Host trust fence (loopback or `trustedHosts`) and a `sha256:` reference whitelist; oversized answers 413
-- **Folder junk filter**: lock files (`~<div align="center">
-
-[English](README.md) | [简体中文](README.zh.md)
-
-</div>
-
-<p align="center">
-  <img src="assets/readme/hero.svg" width="100%" alt="dsh-files: folder upload, read what the built-in read cannot, make the attachment store visible.">
-</p>
-
-# dsh-files
-
-A DeepSeek Harness plugin that fills one official gap per stage of a file's session lifecycle:
-
-- **Ingest**: the **folder button next to the native paperclip** (plus a same-named entry in the official "+" command menu) — the browser flattens the directory (Office lock files, `.DS_Store`, `.env` and other system/hidden files are filtered), and every file enters the official native attachment pipeline
-- **Read**: the **`read_document` tool** — structured text extraction for binary documents (PDF / DOC / DOCX / XLSX) plus enhanced text reading (encoding fallback, paging, sheet-level access)
-- **Manage**: the **`attachment_list` / `export_attachment` tools** — make the attachment store visible to the model (name/size/sha) and copy a file into the workspace for read/edit/bash to work on
-- **Fetch back**: the **attachment dock** (one official pill below the composer card) plus download/export routes and an `@` attachment source — the store becomes visible to users and files can be pulled into the browser (the right path for remote/LAN deployments); the `@` menu inserts the official handle line, identical to what the model saw at upload
-
-> Upload, images and `@` reference were removed in 0.5.0 — harness 0.1.3 ships them natively (universal file upload, the image vision pipeline, unified `@file`/`@session` reference), and does it better. This plugin is part of the [taxueseek plugin matrix](https://github.com/taxueseek#deepseek-harness-%E6%8F%92%E4%BB%B6); the flagship is [argo](https://github.com/taxueseek/argo).
-
-## Why it exists
-
-Native upload in harness 0.1.3 stores files as byte objects and hands the model one handle line (name, size, digest, read-only path) to read with **file tools** — but the built-in read tool rejects binary content with `FS_NOT_TEXT`. Structured text extraction for PDF / DOC / DOCX / XLSX, plus attachment-store listing and export (the official GC is on the roadmap and the store is invisible to the model today), are the gaps the official stack leaves open; this plugin fills them.
-
-<p align="center">
-  <img src="assets/composer.png" alt="Composer: folder upload lives in the official \"+" command menu (screenshot predates 0.5.3, to be re-shot)" width="820">
-</p>
-
-### Scope: how this divides work with the host
-
-The host keeps growing its own document surface; this plugin keeps only the half the host cannot supply — **structured text for the model**:
-
-| Capability | Host native | dsh-files |
-| --- | --- | --- |
-| File upload / image pipeline / `@file` reference | ✅ the only entry point (removed here) | n/a |
-| Document **preview** (Office → PDF, sidebar document preview) | ✅ shipped | n/a |
-| Document **text** into the model (PDF/DOC/DOCX/XLSX extraction, encoding fallback, paging, per-sheet) | ❌ the built-in read answers `FS_NOT_TEXT` for binaries | ✅ `read_document` |
-| Library visible/exportable to the **model** | ❌ write-only, no model visibility | ✅ `attachment_list` / `export_attachment` |
-| Library visible/downloadable to the **user** | ❌ | ✅ panel + download/export routes |
-
-The rule is short: **anything a human looks at belongs to the host; feeding the model is this plugin's job.** The two do not overlap, so `read_document` stays necessary even with native preview — rendering to PDF is not the same as the model reading the prose.
-
-## Capabilities
-
-- **Content sniffing**: PDF header / OLE Compound File (Word 97-2003) / ZIP central-directory members / UTF-8 (fatal) / UTF-16 BOM / GB18030 — decided from bytes, never from extensions; disguised files (an exe renamed .pdf) are rejected. The format hint is only a last resort when bytes are fully unknown
-- **Legacy .doc**: macOS uses the system `textutil` (most complete body and date lines in the gold-standard comparison), other platforms fall back to pure-JS `word-extractor`
-- **Encoding chain**: UTF-16 BOM → UTF-8 (fatal, NUL rejected) → GB18030 (fatal) → UTF-16 without BOM (high-confidence guard); GBK Chinese and BOM-less UTF-16 both read
-- **Paged reads**: line numbers + offset/limit; the per-call character budget differs by format (text full, xlsx 3/4, pdf/doc/docx 1/2), overflow truncates with an explicit remaining-lines marker
-- **Line-number policy**: text (code/config) carries line numbers for precise edits; PDF/DOC/DOCX/XLSX are paragraph flows without line numbers (saves tokens)
-- **XLSX sheet-level reads**: `list_sheets` names the sheets, the `sheet` parameter reads one sheet in full (no row cap), out-of-range errors list the available sheets
-
-<p align="center">
-  <img src="assets/upload-folder-images.png" alt="After a batch folder upload, files land in the native draft rail as official cards" width="680">
-</p>
-- **Scanned PDFs are explicit**: a PDF with no text layer returns an explicit notice, not an empty string
-- **Cooperative cancellation**: parsing listens on the execution signal; user cancel / session close aborts immediately
-- **Output projection**: text results project onto the official `card: 'read'` file card; reads go through `ctx.fs` and inherit session sandbox and fs-observation policy
-/`.~`), dotfiles (`.DS_Store`/`.env`) and OS system files are skipped before the official pipeline, with the skipped count shown to the user
-- **Reading restraint**: the systemPrompt section instructs "probe structure first, read precisely, stop when you have enough"
-- **Self-diagnosing failures**: every attachment-route failure carries an actionable `hint` and a `detail` payload beside its machine-readable `error` code — a 403 hands you the rejected authority and the exact `trustedHosts` line, a 413 hands you the real size, the cap and the config key to raise. The panel and the console surface the same sentence, so no deployment ever answers with a bare error code
 
 ## Install
 
