@@ -30,11 +30,11 @@ for (const name of ['first', 'second']) {
 }
 assert.equal(packs[0].sha256, packs[1].sha256, 'two builds/packs must be byte-identical in this fixed environment');
 const files = packs[0].files.map(file => file.path).sort();
-for (const required of ['LICENSE', 'FORK.md', 'package.json', 'cordis.patch.yml', 'lib/client.js', 'lib/index.js', 'lib/parse/worker.js']) {
+for (const required of ['LICENSE', 'FORK.md', 'package.json', 'cordis.patch.yml', 'lib/client.js', 'lib/index.js', 'lib/parse/worker.js', 'docs/upstream-0.5.5-reconciliation.md']) {
   assert.ok(files.includes(required), `artifact missing ${required}`);
 }
 for (const file of files) {
-  assert.match(file, /^(?:lib\/[\w./-]+|package\.json|cordis\.patch\.yml|CHANGELOG\.md|README(?:\.zh)?\.md|README\.i18n\.yaml|FORK\.md|LICENSE)$/,
+  assert.match(file, /^(?:lib\/[\w./-]+|package\.json|cordis\.patch\.yml|CHANGELOG\.md|README(?:\.zh)?\.md|README\.i18n\.yaml|FORK\.md|LICENSE|docs\/upstream-0\.5\.5-reconciliation\.md)$/,
     `unexpected packaged file: ${file}`);
   assert.ok(!file.split('/').includes('..'));
 }
@@ -61,6 +61,8 @@ const manifest = {
   schemaVersion: 'dsh-files.candidate-artifact/2', package: pkg.name, version: pkg.version,
   status: 'local-candidate-not-published', published: false,
   sourceCommit: status ? null : sourceHead, sourceHead, sourceDirty: !!status,
+  sourceTree: (await run('git', ['rev-parse', 'HEAD^{tree}'])).trim(),
+  sourceParents: (await run('git', ['show', '-s', '--format=%P', 'HEAD'])).trim().split(' ').filter(Boolean),
   sourceSnapshotSha256: digest(JSON.stringify(sourceFiles)), sourceFiles,
   sourceLockSha256: digest(await readFile(path.join(cwd, 'pnpm-lock.yaml'))),
   node: process.version, pnpm: (await run('pnpm', ['--version'])).trim(), npm: (await run('npm', ['--version'])).trim(),
