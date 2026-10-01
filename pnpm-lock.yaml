@@ -106,7 +106,7 @@ importers:
 packages:
 
   '@deepseek-ai/cordis@4.0.4':
-    resolution: {integrity: sha512-obgyxqWAmFn3Re8kvsuUnyW+ihrz6eJCnJO4fh1cQzDtmPYz/zzVeUkH9R94I0OwSVOocK67Kgakm04j/oQXzg==}
+    resolution: {integrity: sha512-YxDP2Y/u6S0gmTFxKwnLvHM7BMiYb6srZTkbVuC7EfJBigdBcHBzf9+ko94GAKxebg7RrioMoaehYpoAs/qnNQ==}
     hasBin: true
     peerDependencies:
       '@deepseek-ai/cordis-plugin-include': ~1.0.9
@@ -118,7 +118,7 @@ packages:
         optional: true
 
   '@deepseek-ai/cosmokit@1.8.5':
-    resolution: {integrity: sha512-LXsrlem9z8dq4sLflj2yuCuYX7KqhdzF5hZly3eZyuTo8d6oDSOXuEgC5DbQWKW+lksm6zmOutQLsP/ma6wR6A==}
+    resolution: {integrity: sha512-XAkedAue4EDQ8pNmH2RtNyXSR9+5ocTlwmtvPD5AJ1AO/sanS4tcOVCapk/xIHYI3hnDACJESkBg7Bdbq/7RUA==}
 
   '@deepseek-ai/dsh-agent@0.2.0-rc.2.vh.1':
     resolution: {integrity: sha512-1Mou7XuCKGdN5v8ba8iHlC7NJJxdGcLXzIu1Sy6JFSKyqYH1/7vD3pohKBk9N0R22x1urbKWyk1v0h+DdXix3g==}
@@ -259,7 +259,7 @@ packages:
       '@deepseek-ai/cordis': ~4.0.4
 
   '@deepseek-ai/schemastery@3.18.4':
-    resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
+    resolution: {integrity: sha512-gyOy9rLe+H5+ETGjMGXHQTeEWZpezF+b9Ih4Vi/GYGlrCzM2CEcoIaGHLu+6zDRs/jvqkX4SeODECpQo2oFVWg==}
 
   '@esbuild/aix-ppc64@0.24.2':
     resolution: {integrity: sha512-thpVCb/rhxE/BnMLQ7GReQLLN8q9qbHmI55F4489/ByVg2aQaQ6kbcLb6FHkocZzQhxc4gx0sCk0tJkKBFzDhA==, tarball: https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.24.2.tgz}
