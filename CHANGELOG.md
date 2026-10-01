@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3-vh.2 (unpublished local candidate)
+
+- Targets the exact DSH `0.2.0-rc.2.vh.1` candidate family for runtime peers and development checks.
+- Replaces upstream rc1 development tarball references with exact fork candidate versions.
+- Retains the single `read_document` capability and no-op client, with no attachment UI or business-import changes.
+- Records per-file packed-artifact SHA-256 evidence alongside the reproducible local candidate tarball.
+
 ## 0.5.3-vh.1
 
 Video Harness qualification release on DSH `0.2.0-rc.1.vh.1`, based on upstream `0.5.3`.
