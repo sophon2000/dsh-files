@@ -2,7 +2,7 @@
 
 `dsh-files` 只给 DeepSeek Harness 增加一种模型能力：对原生文本读取器无法解析的文档做有边界的结构化文字提取。
 
-当前定制版针对 **DSH `0.2.0-rc.1.vh.1`** 验证。安装应使用 [fork Releases](https://github.com/sophon2000/dsh-files/releases) 中带版本和摘要的资产；同名 npm 包不是本版本的分发渠道。
+当前 **`0.5.5-vh.1` 是未发布的本地候选版**，目标宿主为 **DSH `0.2.0-rc.2.vh.1`**，使用经校验的本地 rc2 产物进行构建和测试，尚无候选版发布链接。正式发布使用 [fork Releases](https://github.com/sophon2000/dsh-files/releases) 中带版本和摘要的资产；同名 npm 包不是本版本的分发渠道。
 
 ## 能力边界
 
@@ -13,7 +13,9 @@
 - 不注册附件库、文件夹上传、导出路由、`@` 来源、自定义上传路径或业务文档绑定。
 - 仅为 DSH 包交接保留一个空客户端模块；它不注入客户端服务，也不渲染界面。
 
-上游 0.5.3 的附件闭环代码仍可在 Git 历史中查阅，但不会进入本版发布产物，因为 DSH 0.2 和 Video Harness Catalog 已负责这些职责。
+本版以真实合并历史接入原始上游 [0.5.5（`10d6bf1`）](https://github.com/taxueseek/dsh-files/commit/10d6bf12221ef4d131cc5e66eb8553e84df2c3c9)，再保留 Video Harness 的有边界文档读取能力。上游 SDK 对齐适配为精确的 rc2 fork 版本；附件路由、面板与 `@` 诊断仍不进入产物，这些职责由 DSH 与 Video Harness Catalog 承担。上游 0.5.3 到 0.5.5 未修改文档提取实现。
+
+原生文档预览是给人查看文件；`read_document` 是把正文交给模型，并提供分页与工作表选择。两者用途不同。[FORK.md](FORK.md) 记录了合并来源和保留范围。
 
 ## `read_document`
 
@@ -56,6 +58,8 @@ parser:
 ```
 
 ## 开发检查
+
+使用 Node.js `24.15.0` 和 pnpm `11.9.0`。这些候选依赖尚未发布，安装前须按 [FORK.md](FORK.md) 显式配置本地候选 registry。
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts

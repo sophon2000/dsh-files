@@ -30,13 +30,23 @@ for (const name of ['first', 'second']) {
 }
 assert.equal(packs[0].sha256, packs[1].sha256, 'two builds/packs must be byte-identical in this fixed environment');
 const files = packs[0].files.map(file => file.path).sort();
-for (const required of ['LICENSE', 'FORK.md', 'package.json', 'cordis.patch.yml', 'lib/client.js', 'lib/index.js', 'lib/parse/worker.js']) {
+for (const required of ['LICENSE', 'FORK.md', 'package.json', 'cordis.patch.yml', 'lib/client.js', 'lib/index.js', 'lib/parse/worker.js', 'docs/upstream-0.5.5-reconciliation.md']) {
   assert.ok(files.includes(required), `artifact missing ${required}`);
 }
 for (const file of files) {
-  assert.match(file, /^(?:lib\/[\w./-]+|package\.json|cordis\.patch\.yml|CHANGELOG\.md|README(?:\.zh)?\.md|README\.i18n\.yaml|FORK\.md|LICENSE)$/,
+  assert.match(file, /^(?:lib\/[\w./-]+|package\.json|cordis\.patch\.yml|CHANGELOG\.md|README(?:\.zh)?\.md|README\.i18n\.yaml|FORK\.md|LICENSE|docs\/upstream-0\.5\.5-reconciliation\.md)$/,
     `unexpected packaged file: ${file}`);
   assert.ok(!file.split('/').includes('..'));
+}
+// Hash bytes from the tarball itself, not the corresponding working-tree files.
+// npm's file list records sizes and modes but is not a per-file integrity proof.
+const artifactFiles = [];
+for (const file of packs[0].files.toSorted((a, b) => a.path.localeCompare(b.path))) {
+  const { stdout: bytes } = await promisify(execFile)('tar', ['-xOf', packs[0].artifact, `package/${file.path}`], {
+    cwd, timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer'
+  });
+  assert.equal(bytes.length, file.size, `archive size mismatch: ${file.path}`);
+  artifactFiles.push({ ...file, sha256: digest(bytes) });
 }
 // Record the actual dirty source snapshot; never mislabel the base HEAD as a release commit.
 const sourceNames = (await run('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
@@ -46,15 +56,18 @@ for (const file of [...new Set(sourceNames)].sort()) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 const status = (await run('git', ['status', '--porcelain'])).trim();
+const sourceHead = (await run('git', ['rev-parse', 'HEAD'])).trim();
 const manifest = {
-  schemaVersion: 'dsh-files.candidate-artifact/1', package: pkg.name, version: pkg.version,
-  status: 'local-candidate-not-published', releaseCommit: status ? null : (await run('git', ['rev-parse', 'HEAD'])).trim(),
-  baseHead: (await run('git', ['rev-parse', 'HEAD'])).trim(), sourceDirty: !!status,
+  schemaVersion: 'dsh-files.candidate-artifact/2', package: pkg.name, version: pkg.version,
+  status: 'local-candidate-not-published', published: false,
+  sourceCommit: status ? null : sourceHead, sourceHead, sourceDirty: !!status,
+  sourceTree: (await run('git', ['rev-parse', 'HEAD^{tree}'])).trim(),
+  sourceParents: (await run('git', ['show', '-s', '--format=%P', 'HEAD'])).trim().split(' ').filter(Boolean),
   sourceSnapshotSha256: digest(JSON.stringify(sourceFiles)), sourceFiles,
   sourceLockSha256: digest(await readFile(path.join(cwd, 'pnpm-lock.yaml'))),
   node: process.version, pnpm: (await run('pnpm', ['--version'])).trim(), npm: (await run('npm', ['--version'])).trim(),
   reproducibleInCurrentEnvironment: true, artifact: packs[0].artifact, artifactSha256: packs[0].sha256,
-  files: packs[0].files
+  files: artifactFiles
 };
 await writeFile(path.join(root, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log(JSON.stringify({ directory: root, artifact: manifest.artifact, sha256: manifest.artifactSha256,
