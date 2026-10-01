@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3-vh.3 (unpublished local candidate)
+
+- Preserves the previously packed local vh.2 candidate without overwriting its bytes.
+- Synchronizes the bilingual README Git-blob records and clarifies immutable vendor archive provenance.
+- No parser, runtime API, or host peer changes relative to vh.2.
+
 ## 0.5.3-vh.2 (unpublished local candidate)
 
 - Targets the exact DSH `0.2.0-rc.2.vh.1` candidate family for runtime peers and development checks.

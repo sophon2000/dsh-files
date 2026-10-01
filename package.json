@@ -1,6 +1,6 @@
 {
   "name": "dsh-files",
-  "version": "0.5.3-vh.2",
+  "version": "0.5.3-vh.3",
   "description": "Video Harness read_document plugin for bounded, cancellable text/PDF/DOC/DOCX/XLSX extraction; native DSH owns attachments and file UI.",
   "keywords": [
     "deepseek",

@@ -2,7 +2,7 @@
 
 ## Release identity
 
-- Version: `0.5.3-vh.2` (local candidate, unpublished)
+- Version: `0.5.3-vh.3` (local candidate, unpublished)
 - Upstream base: `dsh-files` `0.5.3` at `8f2d0bd`
 - Candidate host: `@deepseek-ai/*` `0.2.0-rc.2.vh.1`
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; no rc2 publication has been performed
@@ -32,7 +32,7 @@ The shipped client is a no-op with `inject: []`. It exists only because the DSH 
 
 ## Local candidate workflow
 
-Use Node.js `24.15.0` and pnpm `11.9.0`. The rc2 fork packages are unpublished local candidates. Configure the `@deepseek-ai` registry explicitly to serve the verified candidate family before the frozen install; the public npm registry is not a source for these candidate versions. The lockfile integrity identifies the bytes tested. Do not substitute upstream rc2 or rc1 packages. The exact Cordis `4.0.4`, Cosmokit `1.8.5` and Schemastery `3.18.4` vendor candidates match the pre-upgrade lockfile integrity.
+Use Node.js `24.15.0` and pnpm `11.9.0`. The rc2 fork packages are unpublished local candidates. Configure the `@deepseek-ai` registry explicitly to serve the verified candidate family before the frozen install; the public npm registry is not a source for these candidate versions. The lockfile integrity identifies the bytes tested. Do not substitute upstream rc2 or rc1 packages. The exact Cordis `4.0.4`, Cosmokit `1.8.5` and Schemastery `3.18.4` archives are reused byte-for-byte from the accepted Video Harness rc1 artifact set. This aligns the reader development lock with the consumer immutable vendor identities; it is not a claim that the earlier reader lock used those same repacked archives.
 
 `node qualification/artifact.mjs` builds and packs twice, checks the package allowlist, and records source and per-file archive SHA-256 hashes in a local manifest. It does not publish or alter a DSH profile.
 
