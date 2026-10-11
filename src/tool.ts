@@ -7,7 +7,8 @@
 // could not prove its necessity in the 0.5.0 ablation.
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { FsError, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
+import type { WorkingDirectoryService } from '@deepseek-ai/dsh-working-directory'
+import { FsError, type FsObservation, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
 import { sniffFormat, sniffHead, HEAD_SNIFF_BYTES, SUPPORTED_FORMATS, formatFromExtension, type DocumentFormat } from './detect.ts'
 import { runParser } from './parse/runner.ts'
 import { parseLimits, type ParseLimits } from './parse/limits.ts'
@@ -76,11 +77,6 @@ function parseArgs(args: Record<string, unknown>, config: ReadDocumentConfig): P
   return { filePath, offset, limit, format: format as ParsedArgs['format'], sheet, listSheets }
 }
 
-/** The session workspace cwd for this call, when one applies. */
-function sessionCwd(exec: { agent?: { session?: { header?: { cwd?: string } } } }): string | undefined {
-  return exec.agent?.session?.header?.cwd
-}
-
 function renderContent(path: string, format: string, value: { offset: number; lines: Array<{ number: number; text: string }>; totalLines: number }): string {
   const numbered = format === 'text'
   const body = value.lines.map((l) => (numbered ? `${l.number}: ${l.text}` : l.text)).join('\n')
@@ -89,12 +85,13 @@ function renderContent(path: string, format: string, value: { offset: number; li
 }
 
 export function defineReadDocumentTool(ctx: {
+  workingDirectory: Pick<WorkingDirectoryService, 'ensureForExecution'>
   fs: {
     resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget>
     stat(target: FsTarget, signal?: AbortSignal): Promise<{ version: FsVersion; type: string; size?: number } | undefined>
     readBytes(target: FsTarget, signal: AbortSignal | undefined, maxBytes: number): Promise<Uint8Array>
   }
-  emit(event: string, target: FsTarget, observation: object, exec: object): void
+  emit(event: 'fs/observed', target: FsTarget, observation: FsObservation, exec: object): void
 }, config: ReadDocumentConfig) {
   const limits = parseLimits(config.parser)
   let activeReads = 0
@@ -182,7 +179,9 @@ export function defineReadDocumentTool(ctx: {
       if (activeReads >= limits.maxConcurrentReads) throw new Error('document reader busy: concurrent read budget reached; retry after pending reads finish')
       activeReads++
       try {
-        const cwd = sessionCwd(exec)
+        // Share the native file tools' execution snapshot with authorization;
+        // a later directory change belongs to the next call, not this read.
+        const cwd = await ctx.workingDirectory.ensureForExecution(exec)
         const target = await ctx.fs.resolve(input.filePath, {
           ...(cwd !== undefined ? { cwd } : {}),
           signal: exec.signal

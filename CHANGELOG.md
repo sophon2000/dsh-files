@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.5-vh.2 (unpublished local candidate)
+
+- Targets DSH `0.2.1-alpha.2.vh.2` with Cordis `4.0.5-alpha.1` and Schemastery `3.18.5-alpha.1`; the Reader upstream baseline remains `0.5.5`.
+- Shares the native `workingDirectory.ensureForExecution()` snapshot with Host authorization, so a directory change cannot retarget an authorized read; subsequent calls follow the new directory and cancellation and validation failures propagate.
+- Removes the retired `dsh-invariants` development dependency and types the Cordis plugin context.
+- Retains bounded parsers, read-only client and immutable source/artifact qualification.
+
 ## 0.5.5-vh.1 (unpublished local candidate)
 
 - Merges original `taxueseek/dsh-files` upstream `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9` with the preserved `0.5.3-vh.3` fork parent.

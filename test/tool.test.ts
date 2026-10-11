@@ -9,6 +9,11 @@ import path from 'node:path'
 import { mkdtemp, mkdir, writeFile, readFile, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
+const noAgentDirectory = { ensureForExecution: async (exec: { agent?: unknown }): Promise<undefined> => {
+  assert.equal(exec.agent, undefined)
+  return undefined
+} }
+
 test('text uses the full base budget', () => {
   assert.equal(formatOutputBudget('text', 24000), 24000)
 })
@@ -50,7 +55,7 @@ test('read_document reads files larger than 64 KiB (head sniff no longer caps th
     }
   }
   const tool = defineReadDocumentTool(
-    { fs, emit: () => undefined },
+    { fs, workingDirectory: noAgentDirectory, emit: () => undefined },
     {
       readLimit: 800,
       maxFileBytes,
@@ -81,7 +86,7 @@ test('read_document still rejects files over maxFileBytes with FS_TOO_LARGE', as
     }
   }
   const tool = defineReadDocumentTool(
-    { fs, emit: () => undefined },
+    { fs, workingDirectory: noAgentDirectory, emit: () => undefined },
     { readLimit: 800, maxFileBytes, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000 }
   )
   const exec = { signal: new AbortController().signal, agent: undefined } as unknown as Parameters<typeof tool.execute>[1]
@@ -93,7 +98,7 @@ test('read_document still rejects files over maxFileBytes with FS_TOO_LARGE', as
 
 test('malformed optional arguments fail before filesystem access, never silently select defaults', async () => {
   let reads = 0
-  const tool = defineReadDocumentTool({ fs: {
+  const tool = defineReadDocumentTool({ workingDirectory: noAgentDirectory, fs: {
     resolve: async () => { reads++; throw new Error('unexpected filesystem access') },
     stat: async () => undefined,
     readBytes: async () => new Uint8Array()
@@ -108,7 +113,7 @@ test('malformed optional arguments fail before filesystem access, never silently
   assert.equal(reads, 0)
 })
 
-test('one tool instance resolves same-name files using each call session cwd without cross-session reuse', async () => {
+test('one tool instance follows each session current directory and later directory changes', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'dsh-files-workspaces-'))
   try {
     for (const name of ['a', 'b']) {
@@ -117,7 +122,17 @@ test('one tool instance resolves same-name files using each call session cwd wit
     }
     // This adapter verifies Tool-to-FS cwd propagation with real files/workers;
     // native DSH authorization itself is covered by the packaged Profile harness.
-    const tool = defineReadDocumentTool({ fs: {
+    const directories = new WeakMap<object, string>()
+    const resolutions: Array<{ agent: object; signal?: AbortSignal }> = []
+    const tool = defineReadDocumentTool({ workingDirectory: {
+      ensureForExecution: async ({ agent, signal }) => {
+        assert.ok(agent)
+        resolutions.push({ agent, signal })
+        const cwd = directories.get(agent)
+        assert.ok(cwd)
+        return cwd
+      }
+    }, fs: {
       resolve: async (file, opts) => {
         const resolved = path.resolve(opts!.cwd!, file)
         return { targetKey: FsTargetKey(resolved), displayPath: resolved }
@@ -125,11 +140,85 @@ test('one tool instance resolves same-name files using each call session cwd wit
       stat: async target => ({ version: FsVersion('test'), type: 'file', size: (await stat(target.displayPath)).size }),
       readBytes: async target => readFile(target.displayPath)
     }, emit: () => undefined }, { readLimit: 800, maxFileBytes: 1024, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000 })
-    for (let round = 0; round < 2; round++) await Promise.all(['a', 'b'].map(async name => {
-      const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: path.join(root, name) } } } } as Parameters<typeof tool.execute>[1]
-      const result = await tool.execute({ file_path: 'same.txt' }, exec) as { path: string; lines: Array<{ text: string }> }
-      assert.equal(result.path, path.join(root, name, 'same.txt'))
-      assert.equal(result.lines[0].text, `ONLY_${name}`)
-    }))
+    const executions = ['a', 'b'].map(name => ({
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: path.join(root, name) } } }
+    } as Parameters<typeof tool.execute>[1]))
+    for (let round = 0; round < 2; round++) {
+      await Promise.all(executions.map(async (previous, index) => {
+        const exec = { ...previous }
+        const name = (index + round) % 2 === 0 ? 'a' : 'b'
+        assert.ok(exec.agent)
+        directories.set(exec.agent, path.join(root, name))
+        const result = await tool.execute({ file_path: 'same.txt' }, exec) as { path: string; lines: Array<{ text: string }> }
+        assert.equal(result.path, path.join(root, name, 'same.txt'))
+        assert.equal(result.lines[0].text, `ONLY_${name}`)
+      }))
+    }
+    assert.equal(resolutions.length, 4)
+    for (const [index, exec] of executions.entries()) {
+      assert.equal(exec.agent?.session.header.cwd, path.join(root, index === 0 ? 'a' : 'b'))
+      assert.equal(resolutions.filter(value => value.agent === exec.agent && value.signal === exec.signal).length, 2)
+    }
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('Reader preserves the execution identity used to authorize a directory snapshot', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'dsh-files-execution-directory-'))
+  try {
+    for (const name of ['first', 'later']) {
+      await mkdir(path.join(root, name))
+      await writeFile(path.join(root, name, 'same.txt'), name)
+    }
+    type Execution = Parameters<ReturnType<typeof defineReadDocumentTool>['execute']>[1]
+    const agent = { session: { header: { cwd: path.join(root, 'first') } } }
+    const first = { agent, signal: new AbortController().signal } as Execution
+    const next = { agent, signal: new AbortController().signal } as Execution
+    // These are the snapshots already authorized by the Host. The service's
+    // own cache lifecycle is covered by DSH; Reader must pass the exact key.
+    const authorized = new WeakMap<object, string>([
+      [first, path.join(root, 'first')], [next, path.join(root, 'later')],
+    ])
+    const observed: object[] = []
+    const tool = defineReadDocumentTool({
+      workingDirectory: { ensureForExecution: async exec => {
+        observed.push(exec)
+        const cwd = authorized.get(exec)
+        assert.ok(cwd, 'the exact authorized execution must reach workingDirectory')
+        return cwd
+      } },
+      fs: {
+        resolve: async (file, opts) => {
+          const resolved = path.resolve(opts!.cwd!, file)
+          return { targetKey: FsTargetKey(resolved), displayPath: resolved }
+        },
+        stat: async target => ({ version: FsVersion('test'), type: 'file', size: (await stat(target.displayPath)).size }),
+        readBytes: async target => readFile(target.displayPath),
+      },
+      emit: () => undefined,
+    }, { readLimit: 800, maxFileBytes: 1024, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000 })
+    for (const [exec, expected] of [[first, 'first'], [first, 'first'], [next, 'later']] as const) {
+      const result = await tool.execute({ file_path: 'same.txt' }, exec) as { lines: Array<{ text: string }> }
+      assert.equal(result.lines[0].text, expected)
+    }
+    assert.deepEqual(observed, [first, first, next])
+    assert.equal(agent.session.header.cwd, path.join(root, 'first'))
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('directory validation failure prevents document access and releases the read budget', async () => {
+  const failure = new Error('current directory unavailable')
+  let directoryCalls = 0
+  const tool = defineReadDocumentTool({
+    workingDirectory: { ensureForExecution: async () => { directoryCalls++; throw failure } },
+    fs: {
+      resolve: async () => { throw new Error('must not access document') },
+      stat: async () => undefined,
+      readBytes: async () => { throw new Error('must not read document') }
+    },
+    emit: () => undefined
+  }, { readLimit: 800, maxFileBytes: 1024, sheetRowLimit: 200, maxSheets: 5, maxOutputChars: 24000, parser: { maxConcurrentReads: 1 } })
+  const exec = { signal: new AbortController().signal, agent: { session: { header: { cwd: '/original' } } } } as Parameters<typeof tool.execute>[1]
+  for (let attempt = 0; attempt < 2; attempt++) await assert.rejects(tool.execute({ file_path: 'same.txt' }, exec), error => error === failure)
+  assert.equal(directoryCalls, 2)
 })

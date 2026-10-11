@@ -13,6 +13,11 @@ import { defineReadDocumentTool } from '../src/tool.ts'
 import { FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import type { ParseRequest } from '../src/parse/worker.ts'
 
+const noAgentDirectory = { ensureForExecution: async (exec: { agent?: unknown }): Promise<undefined> => {
+  assert.equal(exec.agent, undefined)
+  return undefined
+} }
+
 function request(overrides: Partial<ParseRequest> = {}): ParseRequest {
   return { bytes: new TextEncoder().encode('alpha\nbeta'), format: 'text', options: { sheetRowLimit: 200 },
     limits: parseLimits(), offset: 2, limit: 1, maxOutputChars: 2000, ...overrides }
@@ -122,7 +127,7 @@ test('concurrency gate is before filesystem I/O and releases after completion', 
   let release!: () => void
   const gate = new Promise<void>(r => { release = r })
   let reads = 0
-  const tool = defineReadDocumentTool({ emit() {}, fs: {
+  const tool = defineReadDocumentTool({ workingDirectory: noAgentDirectory, emit() {}, fs: {
     resolve: async () => { reads++; await gate; return { targetKey: FsTargetKey('test'), displayPath: '/test' } },
     stat: async () => ({ version: FsVersion('v1'), type: 'file', size: 1 }),
     readBytes: async () => new Uint8Array([65])

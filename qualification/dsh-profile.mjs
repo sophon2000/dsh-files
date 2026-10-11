@@ -101,7 +101,8 @@ for(const chunk of [{type:'block-start',index:0,blockType:'text'},{type:'text-de
 await writeFile(`${root}/replay.jsonl`,replaySession(rows));
 await writeFile(`${root}/deny.mjs`,"export const inject=['tools']; export function apply(ctx){ctx.on('tools/pre-execute',async(exec,next)=>exec.name==='read_document'&&exec.arguments.file_path==='blocked.txt'?{kind:'deny',reason:'qualification deliberate denial'}:next());}\n");
 await writeFile(`${root}/overlay.yml`,yaml.dump([
- {id:'llm-deepseek',name:'@deepseek-ai/dsh-llm-deepseek',disabled:true},
+ {id:'llm-deepseek',name:'@deepseek-ai/dsh-llm-deepseek-api-key',disabled:true},
+ {id:'llm-deepseek-account',name:'@deepseek-ai/dsh-llm-deepseek-account',disabled:true},
  {id:'llm-pi-ai',name:'@deepseek-ai/dsh-llm-pi-ai',disabled:true},
  {id:'session-title-llm',name:'@deepseek-ai/dsh-session-title-first-prompt-llm',disabled:true},
  {insert:[{id:'qualification-deny',name:`${root}/deny.mjs`},{id:'llm-replay',name:hostRequire.resolve('@deepseek-ai/dsh-llm-replay'),config:{file:`${root}/replay.jsonl`,providers:[{id:'deepseek-official',name:'Replay',models:[{id:'deepseek-v4-flash',contextWindow:128000,inputModalities:['text']}]}]}}]}
