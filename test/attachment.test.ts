@@ -58,6 +58,25 @@ test('listAttachments on a missing store returns empty, not throw', async () => 
   assert.deepEqual(await listAttachments(join(store, 'nope')), [])
 })
 
+test('listAttachments caches by mtime and invalidates on directory change', async () => {
+  // 第一次调用：全量扫描并填充缓存。
+  const first = await listAttachments(store)
+  assert.equal(first.length, 1)
+  // 第二次调用：命中缓存，结果一致。
+  const second = await listAttachments(store)
+  assert.deepEqual(first, second)
+  // 添加新文件 → mtime 变化 → 缓存失效 → 重新扫描。
+  const otherSha = 'cd'.repeat(32)
+  const otherDir = join(store, 'files', otherSha.slice(0, 2), otherSha)
+  await mkdir(otherDir, { recursive: true })
+  await writeFile(join(otherDir, 'new-file.txt'), 'new content')
+  // mtime 变化是文件系统行为；等待一 tick 确保 mtime 不同。
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const third = await listAttachments(store)
+  assert.equal(third.length, 2)
+  assert.ok(third.some((e) => e.name === 'new-file.txt'))
+})
+
 test('findAttachment resolves by sha prefix', async () => {
   const found = await findAttachment(store, FAKE_SHA.slice(0, 8))
   assert.equal(found.name, FAKE_NAME)
