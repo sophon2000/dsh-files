@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.7（未发布）
+
+### 附件管理：可删可管（响应公开反馈 #16「只进不出」）
+
+- **`DELETE /plugins/dsh-files/attachments?ref=sha256:…`**：删除单个附件。面板行内新增垃圾桶按钮，**两步确认**（首击进入确认态并提示「不可恢复」，再击执行；4 秒未确认自动复位），防误点即永久丢失。删除不可逆、无回收站；如需保留请先用面板的下载/导出。
+- **安全护栏**：ref 必须归一化为 `sha256:<64 位 hex>`（`normalizeAttachmentRef`）且命中库内已扫描条目（`findEntry`），删除范围严格限定在 `files/<sha2>/<sha>/` 对象目录——路径由内部拼接的 sha 派生，外部输入不参与路径构造；与下载/导出共用同一 Host 信任栅栏（回环/`trustedHosts`）。
+- **失败契约不变**：`invalid-ref`(400) / `attachment-not-found`(404) / `delete-failed`(500) 均带 `hint`；非 GET/DELETE 方法回 405 并带 `Allow: GET, DELETE`。
+- 路由合并注册：`/attachments` 同一路径按方法分派（宿主 webServer 按 path 建路由表，同 path 二次注册会互相覆盖）。
+- 测试 101 → 105：DELETE 405/400/404/403 四条路径；实测覆盖真实删盘、缓存自动失效、重复删除 404、非回环 403、清空至 0。
+
+### 性能：分片级目录扫描缓存
+
+- **`listAttachments` 分片级 mtime 缓存**：CAS 布局下对象级增删（新增/删除 `<sha>` 目录）只更新所属分片目录的 mtime，因此按分片校验即可精确失效——只 `readdir` 根 + `stat` 各分片，变更过的分片才重扫。实测 2000 附件 / 256 分片：冷启动 70ms → 热调用 **0.06ms**；单分片新增后重扫仅 **0.27ms**（全量扫描的 1/260）。
+- 并行扫描各分片（`Promise.all`），排序加 sha 兜底保证并发下结果稳定；删除后分片 mtime 变化 → 缓存自动失效，无需手动清缓存。
+
+### 架构：宿主组件依赖归位（采纳公开 PR #14 的方案）
+
+- **4 个宿主组件从 `dependencies` 移到 `peerDependencies`**：`@deepseek-ai/cordis`、`dsh-client-ui-primitives`、`dsh-fs`、`schemastery`——它们是宿主自带件，插件不应重复安装；`dsh-fs` 的 `FsError` 用于 `instanceof` 判断，双副本会破坏语义。同时在 `devDependencies` 保留精确版本供本仓开发/类型检查。
+- peer 范围取宿主实际发货区间（cordis `^4.0.3`、ui-primitives/dsh-fs `^0.2.0-rc.1`、schemastery `^3.18.1`）；宿主兼容性检查只读 `peerDependencies`，此次归位后保护生效。
+- 与 0.5.6 对 `dsh-tools` 的同类处理一致；本机 profile 实测：cordis 4.0.3 / dsh-fs 0.2.0-rc.2 / ui-primitives 0.2.0-rc.2 均在范围内。
+
 ## 0.5.6
 
 ### 收录元数据补齐（DSH STORE catalog 修复）

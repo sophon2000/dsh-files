@@ -36,7 +36,7 @@ Here is a file's **four-stage session lifecycle**, one official gap filled per s
 
 - **Ingest**: the **folder button next to the native paperclip** (plus a same-named entry in the official "+" command menu) — the browser flattens the directory (Office lock files, `.DS_Store`, `.env` and other system/hidden files are filtered), and every file enters the official native attachment pipeline
 - **Read**: the **`read_document` tool** — structured text extraction for binary documents (PDF / DOC / DOCX / XLSX) plus enhanced text reading (encoding fallback, paging, sheet-level access)
-- **Manage**: the **`attachment_list` / `export_attachment` tools** — make the attachment store visible to the model (name/size/sha) and copy a file into the workspace for read/edit/bash to work on
+- **Manage**: the **`attachment_list` / `export_attachment` tools** plus **in-panel delete** — make the attachment store visible to the model (name/size/sha) and copy a file into the workspace for read/edit/bash to work on; the panel also removes a single attachment (the store is no longer append-only)
 - **Fetch back**: the **attachment dock** (one official pill below the composer card) plus download/export routes and an `@` attachment source — the store becomes visible to users and files can be pulled into the browser (the right path for remote/LAN deployments); the `@` menu inserts the official handle line, identical to what the model saw at upload
 
 > Upload, images and `@` reference were removed in 0.5.0 — harness 0.1.3 ships them natively (universal file upload, the image vision pipeline, unified `@file`/`@session` reference), and does it better. This plugin is part of the [taxueseek plugin matrix](https://github.com/taxueseek#deepseek-harness-%E6%8F%92%E4%BB%B6); the flagship is [argo](https://github.com/taxueseek/argo).
@@ -65,9 +65,10 @@ Native upload in harness 0.1.3 stores files as byte objects and hands the model 
 - **Cooperative cancellation**: parsing listens on the execution signal; user cancel / session close aborts immediately
 - **Output projection**: text results project onto the official `card: 'read'` file card; reads go through `ctx.fs` and inherit session sandbox and fs-observation policy
 - **Attachment-store window**: `attachment_list` enumerates the store (original name / sha prefix / size / mtime); `export_attachment` copies by sha prefix or exact name with `COPYFILE_EXCL` no-overwrite, dest validated through the `ctx.fs` sandbox
-- **Attachment library (0.5.3)**: one **official Pill** in the host's `conversation.composer.dock` slot (where the host itself renders session-stats pills) reading `附件库 N · X MB`; clicking expands the card below it: the library list (name/size/short time), **re-insert** (mount a stored file back onto the composer as a fresh official attachment — an old session's upload rides any new session without re-picking from disk), **download** (pull the file to the browser — the right path for remote/LAN use), **export to workspace** (auto-named, collision-safe under `attachments/`) and name search (filtered client-side — no server round-trip per keystroke; the list refetches on re-expand only after 30s). It follows the composer column width; UI data only, zero prompt tokens
+- **Attachment library (0.5.3)**: one **official Pill** in the host's `conversation.composer.dock` slot (where the host itself renders session-stats pills) reading `附件库 N · X MB`; clicking expands the card below it: the library list (name/size/short time), **re-insert** (mount a stored file back onto the composer as a fresh official attachment — an old session's upload rides any new session without re-picking from disk), **download** (pull the file to the browser — the right path for remote/LAN use), **export to workspace** (auto-named, collision-safe under `attachments/`), **delete** (new in 0.5.7 — remove a single attachment from the store; irreversible, no trash bin) and name search (filtered client-side — no server round-trip per keystroke; the list refetches on re-expand only after 30s). It follows the composer column width; UI data only, zero prompt tokens
 - **`@` attachment source (0.5.2)**: the `@` menu gains an attachment group alongside the host's workspace candidates; picking one inserts the official handle line, so the model sees the same file line it saw at upload
 - **Download/export routes (0.5.2)**: bytes flow through the official `AttachmentStore.readFileStream` (integrity-checked), behind two gates — Host trust fence (loopback or `trustedHosts`) and a `sha256:` reference whitelist; oversized answers 413
+- **Delete (0.5.7)**: `DELETE /plugins/dsh-files/attachments?ref=sha256:…` removes a single attachment (trash button in the panel row with a **two-step confirm** against mis-clicks; irreversible, no trash bin). Safeguards: the `ref` must normalize to `sha256:<64 hex>` and match a scanned library entry, and the removal is confined to the `files/<sha2>/<sha>/` object directory — the path is built from the internally-derived sha, external input never builds a path; same Host trust fence as download/export
 
 ## Install
 
@@ -173,7 +174,7 @@ Every failure from `/plugins/dsh-files/attachments*` has the same shape: a machi
 | `attachment-object-missing` | 404 | The index lists it but the object is gone; re-upload |
 | `attachment-corrupt` | 409 | Bytes failed the integrity check; re-upload the source rather than retrying |
 | `attachment-too-large` | 413 | Reports real size, cap and `maxDownloadBytes`; the other transfer path may still work |
-| `list-failed` / `export-failed` / `attachment-read-failed` | 500 | Carries the underlying reason and what to check |
+| `list-failed` / `export-failed` / `attachment-read-failed` / `delete-failed` | 500 | Carries the underlying reason and what to check |
 
 ## Security
 
@@ -181,7 +182,7 @@ Every failure from `/plugins/dsh-files/attachments*` has the same shape: a machi
 
 Declared explicitly, mapped to the capability vocabulary automated reviews scan for:
 
-- **Files**: yes. Document parsing is read-only; the attachment-library scan is a host-side read-only walk over the DSH attachment store; export writes only through `ctx.fs`, inheriting the session sandbox. No deletions, no paths outside the store and session workspace.
+- **Files**: yes. Document parsing is read-only; the attachment-library scan is a host-side read-only walk over the DSH attachment store; export writes only through `ctx.fs`, inheriting the session sandbox; delete (0.5.7) is confined to object directories inside the library (`files/<sha2>/<sha>/`), with paths derived from a scanned sha — external input never builds a path. No paths outside the store and session workspace are touched.
 - **Network**: same-origin only. The client half calls the plugin's own routes under `/plugins/dsh-files/*` served by the host process. No third-party endpoints, no telemetry.
 - **Commands**: one, macOS-only — legacy `.doc` files are converted with `textutil` via `execFile`, fixed binary, fixed argument shape, output to stdout. No shell interpolation, no user-supplied binaries.
 - **Credentials**: none. The only environment variable read is `DSH_HOME` (a directory path used to locate the attachment store, mirroring the official home-path resolution) — no secrets, tokens, or keychains.
@@ -193,7 +194,7 @@ Declared explicitly, mapped to the capability vocabulary automated reviews scan 
 - Parsing dependencies are read-only and maintained: `pdfjs-dist` (Mozilla), `mammoth`, `read-excel-file`, `word-extractor` (.doc fallback)
 - ZIP central-directory probing never expands members; malicious archives are rejected safely
 - Reads and export destinations go through `ctx.fs`, inheriting the session sandbox, same rights as the built-in read tool; the attachment-store scan is a host-side read-only walk with internally-constructed paths
-- Attachment download/export flows through the official `AttachmentStore.readFileStream` (integrity check, no absolute paths), on top of the Host trust fence + `sha256:` reference whitelist + size cap; there is no delete route (content-addressed objects may be referenced by historical messages; deletion stays with the official future retention)
+- Attachment download/export flows through the official `AttachmentStore.readFileStream` (integrity check, no absolute paths), on top of the Host trust fence + `sha256:` reference whitelist + size cap; the **delete route (new in 0.5.7, answering the public "append-only" feedback)** is confined to object directories inside the store (normalized `ref` + a scanned entry as double confirmation; the path is built from the internal sha). There is no bulk-delete or wipe API; content-addressed objects may be referenced by historical messages, so deletion is an explicit, irreversible user action — download or export first if you want to keep a copy
 - The dock and `@` source are UI-layer data: no systemPrompt injection, no model tools, zero tokens
 
 ## Development

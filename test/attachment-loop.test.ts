@@ -44,13 +44,18 @@ function recordingServer() {
   const routes = new Map<string, (req: unknown, res: unknown) => void | Promise<void>>()
   const webServer = {
     register(route: { path: string; handler: (req: never, res: never) => void | Promise<void> }) {
+      // 宿主 dsh-host-webserver 对重复 (kind, path) 直接抛错（不是覆盖）：
+      // 桩保持同语义，把「同 path 二次注册」这类回归在测试期就打红。
+      if (routes.has(route.path)) throw new Error(`webserver: duplicate exact route "${route.path}"`)
       routes.set(route.path, route.handler as (req: unknown, res: unknown) => void | Promise<void>)
       return () => routes.delete(route.path)
     }
   }
-  const call = async (path: string, headers: Record<string, string>) => {
-    const handler = routes.get(path)
-    assert.ok(handler !== undefined, `route ${path} must be registered`)
+  const call = async (path: string, headers: Record<string, string>, method = 'GET') => {
+    // 路由按 path 注册；调用串可能带 query——查表时剥离，handler 仍收完整 url。
+    const routePath = path.split('?')[0]
+    const handler = routes.get(routePath)
+    assert.ok(handler !== undefined, `route ${routePath} must be registered`)
     let status = 0
     let body = ''
     const res = {
@@ -61,7 +66,7 @@ function recordingServer() {
       once() { return res },
       destroy() {}
     }
-    await handler({ url: path, method: 'GET', headers }, res)
+    await handler({ url: path, method, headers }, res)
     return { status, body: body === '' ? undefined : JSON.parse(body) as Record<string, unknown> }
   }
   return { webServer, call }
@@ -107,6 +112,58 @@ test('loopback reaches the list handler and is never answered by the fence', asy
   const { status } = await call('/plugins/dsh-files/attachments', { host: '127.0.0.1:3080' })
   // 目录不存在按空清单处理，故不是 403——证明围栏放行
   assert.equal(status, 200)
+})
+
+// ---------------- DELETE route (attachment management) ----------------
+
+test('DELETE route rejects other methods (PUT) with 405 and names both verbs', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments', { host: '127.0.0.1:3080' }, 'PUT')
+  assert.equal(status, 405)
+  assert.equal(body?.error, 'method-not-allowed')
+  assert.ok(String(body?.hint).includes('DELETE'), String(body?.hint))
+  assert.ok(String(body?.hint).includes('GET'), String(body?.hint))
+})
+
+test('DELETE route rejects invalid ref with 400', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments?ref=invalid', { host: '127.0.0.1:3080' }, 'DELETE')
+  assert.equal(status, 400)
+  assert.equal(body?.error, 'invalid-ref')
+})
+
+test('DELETE route returns 404 for non-existent attachment', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments?ref=sha256:' + '0'.repeat(64), { host: '127.0.0.1:3080' }, 'DELETE')
+  assert.equal(status, 404)
+  assert.equal(body?.error, 'attachment-not-found')
+})
+
+test('DELETE route is blocked by fence for non-loopback hosts', async () => {
+  const { webServer, call } = recordingServer()
+  registerAttachmentRoutes(
+    { webServer },
+    {},
+    { attachmentsDir: '/nonexistent', maxDownloadBytes: 1024, trustedHosts: [] }
+  )
+  const { status, body } = await call('/plugins/dsh-files/attachments?ref=sha256:' + '0'.repeat(64), { host: 'dsh.example.com:3080' }, 'DELETE')
+  assert.equal(status, 403)
+  assert.equal(body?.error, 'host-not-trusted')
 })
 
 // ---------------- failure payloads (自我诊断) ----------------

@@ -29,6 +29,8 @@ import {
   IconPaperclipOutlineMedium,
   IconRefreshOutlineMedium,
   IconRightUpOutlineMedium,
+  IconTrashOutlineMedium,
+  IconWarningTriangleOutlineMedium,
   Pill,
   Toast,
   Tooltip
@@ -462,6 +464,8 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
   // the native attachment card and the model receives a new handle line, so
   // an old upload rides any (new) session without re-picking from disk.
   const [insertingRef, setInsertingRef] = useState<string | null>(null)
+  const [deletingRef, setDeletingRef] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const insertOne = async (item: AttachmentItem) => {
     if (sessionId === undefined) {
       notify('无当前会话，无法插入')
@@ -513,6 +517,48 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
       }
     } catch (error) {
       setNote(error instanceof Error ? error.message : '导出失败')
+    }
+  }
+
+  // 删除是不可逆动作且按钮与下载/导出并排：两步确认（首击进入确认态，
+  // 再击执行；4 秒未确认自动复位），防误点即永久丢失。
+  const confirmTimer = useRef<number | undefined>(undefined)
+  const armDelete = (item: AttachmentItem) => {
+    if (pendingDelete === item.ref) {
+      void deleteOne(item)
+      return
+    }
+    setPendingDelete(item.ref)
+    setNote(`再次点击确认删除「${item.name}」（不可恢复）`)
+    window.clearTimeout(confirmTimer.current)
+    confirmTimer.current = window.setTimeout(() => setPendingDelete(null), 4000)
+  }
+  const deleteOne = async (item: AttachmentItem) => {
+    if (sessionId === undefined) {
+      setNote('无当前会话')
+      return
+    }
+    window.clearTimeout(confirmTimer.current)
+    setPendingDelete(null)
+    setNote('')
+    setDeletingRef(item.ref)
+    try {
+      const response = await fetch(
+        `/plugins/dsh-files/attachments?ref=${encodeURIComponent(item.ref)}`,
+        { method: 'DELETE' }
+      )
+      const body = (await response.json()) as { deleted?: string } & RouteFailureBody
+      if (response.ok && body.deleted !== undefined) {
+        setNote(`已删除 ${body.deleted}`)
+        // 删除后刷新列表（mtime 变化 → 缓存自动失效）
+        load()
+      } else {
+        setNote(body.hint ?? body.error ?? `删除失败（HTTP ${response.status}）`)
+      }
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : '删除失败')
+    } finally {
+      setDeletingRef(null)
     }
   }
 
@@ -574,6 +620,22 @@ export function AttachmentDock({ sessionId, inputActions }: DockProps) {
                   onClick={() => void exportOne(item)}
                 >
                   <IconRightUpOutlineMedium size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="dsh-files-dock-action"
+                  aria-label={pendingDelete === item.ref ? `确认删除 ${item.name}` : `删除 ${item.name}`}
+                  title={pendingDelete === item.ref ? '再次点击确认删除（不可恢复）' : '删除'}
+                  disabled={deletingRef === item.ref}
+                  onClick={() => armDelete(item)}
+                >
+                  {deletingRef === item.ref ? (
+                    <IconLoadingOutlineMedium size={14} />
+                  ) : pendingDelete === item.ref ? (
+                    <IconWarningTriangleOutlineMedium size={14} />
+                  ) : (
+                    <IconTrashOutlineMedium size={14} />
+                  )}
                 </button>
               </div>
             ))}

@@ -36,7 +36,7 @@ dsh-files 就是补这两个洞的。**读**：AI 能读懂 PDF / Word / Excel �
 
 - **进**：**回形针旁的文件夹按钮**（+ 菜单里另有同名命令入口）——浏览器递归展平（过滤 Office 锁文件、`.DS_Store`、`.env` 等系统/隐藏文件），逐文件进入官方原生附件管线
 - **读**：**`read_document` 工具**——读内置 read 工具拒绝的二进制文档（PDF / DOC / DOCX / XLSX）与增强文本读取（编码回退、分页、sheet 级访问）
-- **管**：**`attachment_list` / `export_attachment` 工具**——附件库对模型可见（文件名/大小/sha），一键拷贝进工作区供 read/edit/bash 再加工
+- **管**：**`attachment_list` / `export_attachment` 工具 + 面板内删除**——附件库对模型可见（文件名/大小/sha），一键拷贝进工作区供 read/edit/bash 再加工；面板里可直接删除单个附件（不再只进不出）
 - **取**：**附件库面板**（输入卡下方官方坞位，收起为一枚官方胶囊）+ 下载/导出路由 + `@` 附件源——附件库对用户可见可下载（远程/LAN 把文件拉回本机），`@` 菜单插入官方 handle 行（与上传时模型所见一致）
 
 > 上传、图片、`@` 工作区引用自 0.5.0 起移除——harness 0.1.3 起原生提供（任意文件上传、图片视觉管线、`@file`/`@session` 统一引用），且更强。本插件是[踏雪寻仙插件矩阵](https://github.com/taxueseek#deepseek-harness-%E6%8F%92%E4%BB%B6)的一员，主打 [argo](https://github.com/taxueseek/argo)。
@@ -65,8 +65,9 @@ harness 0.1.3 的原生上传把文件存为字节对象，模型拿到一行 ha
 - **协作取消**：解析期间监听执行信号，用户取消/会话关闭立即中止
 - **输出呈现**：text 结果投影为官方 `card: 'read'` 读文件卡片；解析走 `ctx.fs`，继承会话沙箱与 fs 观察策略
 - **附件库窗口**：`attachment_list` 列出附件库（原名/sha 前缀/大小/时间）；`export_attachment` 按 sha 前缀或原名导出，`COPYFILE_EXCL` 防覆盖，dest 走 `ctx.fs` 沙箱校验
-- **附件库（0.5.3）**：输入卡**下方**官方坞位（`conversation.composer.dock`——官方自身在此放会话统计胶囊）里的一枚**官方 Pill 胶囊**「附件库 N 个 · X MB」，点开才展开卡片：附件列表（名/大小/时间，时间为短格式）、**重新插入**（把库内文件作为新附件挂回当前输入区——老会话的上传直接 ride 到新会话，不用回磁盘找）、**下载**（浏览器拉回本机，远程/LAN 场景的正路）、**导出到工作区**（`attachments/` 下自动命名防覆盖）、文件名搜索（客户端过滤，不打服务端往返；收起再展开超 30 秒才重拉清单）。跟随输入卡列宽。纯 UI 数据，零 prompt token
+- **附件库（0.5.3）**：输入卡**下方**官方坞位（`conversation.composer.dock`——官方自身在此放会话统计胶囊）里的一枚**官方 Pill 胶囊**「附件库 N 个 · X MB」，点开才展开卡片：附件列表（名/大小/时间，时间为短格式）、**重新插入**（把库内文件作为新附件挂回当前输入区——老会话的上传直接 ride 到新会话，不用回磁盘找）、**下载**（浏览器拉回本机，远程/LAN 场景的正路）、**导出到工作区**（`attachments/` 下自动命名防覆盖）、**删除**（0.5.7 新增——单个附件从库里移除，只进不出成为历史）、文件名搜索（客户端过滤，不打服务端往返；收起再展开超 30 秒才重拉清单）。跟随输入卡列宽。纯 UI 数据，零 prompt token
 - **`@` 附件源（0.5.2）**：`@` 菜单新增附件组（与官方工作区候选共存），选中插入官方 handle 行——模型看到与上传时一致的文件行，直接 read 即可
+- **删除**（0.5.7）：`DELETE /plugins/dsh-files/attachments?ref=sha256:…` 删除单个附件（面板行内垃圾桶按钮，**两步确认**防误点；删除不可逆，无回收站）。安全护栏：ref 必须归一化为 `sha256:<64 位 hex>`、目标必须是库内已扫描到的对象，删除范围严格限定在 `files/<sha2>/<sha>/` 对象目录——路径由内部拼接的 sha 派生，外部输入不参与路径构造；与下载/导出共用同一 Host 信任栅栏
 - **下载/导出路由（0.5.2）**：走官方 `AttachmentStore.readFileStream`（完整性校验），双重护栏——Host 回环/`trustedHosts` 信任栅栏 + `sha256:` 引用白名单，超限 413
 
 ## 安装
@@ -173,7 +174,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 | `attachment-object-missing` | 404 | 索引有条目但对象已不在，需重新上传 |
 | `attachment-corrupt` | 409 | 字节未通过完整性校验，重传源文件而非重试传输 |
 | `attachment-too-large` | 413 | 给出实际大小、上限与 `maxDownloadBytes`；也可换另一条传输路径 |
-| `list-failed` / `export-failed` / `attachment-read-failed` | 500 | 附上底层原因与可检查项 |
+| `list-failed` / `export-failed` / `attachment-read-failed` / `delete-failed` | 500 | 附上底层原因与可检查项 |
 
 ## 安全
 
@@ -181,7 +182,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 按自动化审查扫描的能力词汇逐项声明：
 
-- **文件**：有。文档解析只读；附件库扫描由宿主进程对 DSH 附件存储只读遍历；导出落盘只走 `ctx.fs`，继承会话沙箱。无删除，不触碰存储与会话工作区之外的路径。
+- **文件**：有。文档解析只读；附件库扫描由宿主进程对 DSH 附件存储只读遍历；导出落盘只走 `ctx.fs`，继承会话沙箱；删除（0.5.7）仅限附件库内 `files/<sha2>/<sha>/` 对象目录，路径由扫描到的 sha 派生、不参与外部路径构造，不触碰存储与会话工作区之外的任何路径。
 - **网络**：仅同源。客户端半区只调用宿主进程提供的本插件路由 `/plugins/dsh-files/*`。无第三方端点，无遥测。
 - **命令**：一条，仅 macOS——旧版 `.doc` 用 `textutil` 经 `execFile` 转换，二进制固定、参数形状固定、输出走 stdout。无 shell 拼接，不执行用户提供的程序。
 - **凭据**：无。唯一读取的环境变量是 `DSH_HOME`（用于定位附件存储的目录路径，与官方 home 路径解析同语义）——不读任何密钥、令牌、钥匙串。
@@ -193,7 +194,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 - 解析依赖均为只读维护中库：`pdfjs-dist`（Mozilla 官方）、`mammoth`、`read-excel-file`、`word-extractor`（.doc 兜底）
 - ZIP 中央目录探测不展开任何成员，恶意归档安全拒绝
 - 文件读取与导出落盘走 `ctx.fs`，继承会话沙箱，与内置 read 工具同权；附件库扫描由宿主进程只读执行，路径全部内部拼接
-- 附件下载/导出除经官方 `AttachmentStore.readFileStream`（内容完整性校验、不暴露绝对路径），外再叠 Host 信任栅栏 + `sha256:` 引用白名单 + 尺寸上限；无任何删除路由（内容寻址对象可能被历史消息引用，删除留给官方未来 retention）
+- 附件下载/导出除经官方 `AttachmentStore.readFileStream`（内容完整性校验、不暴露绝对路径），外再叠 Host 信任栅栏 + `sha256:` 引用白名单 + 尺寸上限；**删除路由（0.5.7 新增，响应公开反馈「只进不出」）**删除范围严格限定在库内对象目录（ref 归一化 + 扫描命中双重确认，路径由内部 sha 拼接），无批量删除与清空接口；内容寻址对象可能被历史消息引用，删除是用户显式动作、不可逆——如需保留请先下载或导出
 - 面板与 `@` 源均为 UI 层数据：不注入 systemPrompt、不注册模型工具，零 token
 
 ## 开发
