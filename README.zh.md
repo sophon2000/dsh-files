@@ -65,9 +65,9 @@ harness 0.1.3 的原生上传把文件存为字节对象，模型拿到一行 ha
 - **协作取消**：解析期间监听执行信号，用户取消/会话关闭立即中止
 - **输出呈现**：text 结果投影为官方 `card: 'read'` 读文件卡片；解析走 `ctx.fs`，继承会话沙箱与 fs 观察策略
 - **附件库窗口**：`attachment_list` 列出附件库（原名/sha 前缀/大小/时间）；`export_attachment` 按 sha 前缀或原名导出，`COPYFILE_EXCL` 防覆盖，dest 走 `ctx.fs` 沙箱校验
-- **附件库（0.5.3）**：输入卡**下方**官方坞位（`conversation.composer.dock`——官方自身在此放会话统计胶囊）里的一枚**官方 Pill 胶囊**「附件库 N 个 · X MB」，点开才展开卡片：附件列表（名/大小/时间，时间为短格式）、**重新插入**（把库内文件作为新附件挂回当前输入区——老会话的上传直接 ride 到新会话，不用回磁盘找）、**下载**（浏览器拉回本机，远程/LAN 场景的正路）、**导出到工作区**（`attachments/` 下自动命名防覆盖）、**删除**（0.5.7 新增——单个附件从库里移除，只进不出成为历史）、文件名搜索（客户端过滤，不打服务端往返；收起再展开超 30 秒才重拉清单）。跟随输入卡列宽。纯 UI 数据，零 prompt token
+- **附件库（0.5.3）**：输入卡**下方**官方坞位（`conversation.composer.dock`——官方自身在此放会话统计胶囊）里的一枚**官方 Pill 胶囊**「附件库 N 个 · X MB」，点开才展开卡片：附件列表（名/大小/时间，时间为短格式）、**重新插入**（把库内文件作为新附件挂回当前输入区——老会话的上传直接 ride 到新会话，不用回磁盘找）、**下载**（浏览器拉回本机，远程/LAN 场景的正路）、**导出到工作区**（`attachments/` 下自动命名防覆盖）、**删除**（0.6.0 新增——单个附件从库里移除，只进不出成为历史）、文件名搜索（客户端过滤，不打服务端往返；收起再展开超 30 秒才重拉清单）。跟随输入卡列宽。纯 UI 数据，零 prompt token
 - **`@` 附件源（0.5.2）**：`@` 菜单新增附件组（与官方工作区候选共存），选中插入官方 handle 行——模型看到与上传时一致的文件行，直接 read 即可
-- **删除**（0.5.7）：`DELETE /plugins/dsh-files/attachments?ref=sha256:…` 删除单个附件（面板行内垃圾桶按钮，**两步确认**防误点；删除不可逆，无回收站）。安全护栏：ref 必须归一化为 `sha256:<64 位 hex>`、目标必须是库内已扫描到的对象，删除范围严格限定在 `files/<sha2>/<sha>/` 对象目录——路径由内部拼接的 sha 派生，外部输入不参与路径构造；与下载/导出共用同一 Host 信任栅栏
+- **删除**（0.6.0）：`DELETE /plugins/dsh-files/attachments?ref=sha256:…` 删除单个附件（面板行内垃圾桶按钮，**两步确认**防误点；删除不可逆，无回收站）。安全护栏：ref 必须归一化为 `sha256:<64 位 hex>`、目标必须是库内已扫描到的对象，删除范围严格限定在 `files/<sha2>/<sha>/` 对象目录——路径由内部拼接的 sha 派生，外部输入不参与路径构造；与下载/导出共用同一 Host 信任栅栏
 - **下载/导出路由（0.5.2）**：走官方 `AttachmentStore.readFileStream`（完整性校验），双重护栏——Host 回环/`trustedHosts` 信任栅栏 + `sha256:` 引用白名单，超限 413
 
 ## 安装
@@ -92,15 +92,15 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 | dsh-files | Harness | 说明 |
 | --- | --- | --- |
-| 0.5.6 | **0.2.0-rc.2（当前版，已实测）** | SDK 对齐与 0.5.5 相同；`package.json` 新增机器可读元数据：`repository`、`engines`（Node ≥ 20）、`dsh.compatibility`（`dshReleases` / `dshOperations`）。 |
+| 0.6.0 | **0.2.1-alpha.3（当前，在跑）** | 附件删除路由 + 分片级扫描缓存 + 宿主组件依赖归位（PR #14）；面与 0.5.x 相同，无新增座位依赖。 |
+| 0.5.6 | 0.2.0-rc.2（已实测） | SDK 对齐与 0.5.5 相同；`package.json` 新增机器可读元数据：`repository`、`engines`（Node ≥ 20）、`dsh.compatibility`（`dshReleases` / `dshOperations`）。 |
 | 0.5.5 | 0.2.0-rc.2（已实测） | SDK 全线对齐宿主 `0.2.0-rc.2`（`dsh-fs` / `dsh-tools` / `dsh-client-ui-primitives` 三者与宿主同版本），客户端组件解析不再有版本歧义。 |
 | 0.5.3–0.5.4 | 0.1.7-alpha.1 | SDK 锁定 `0.1.7-alpha.1`；在 `0.2.0-rc.2` 宿主上客户端图标可能解析失败（见下）。 |
 | 0.5.x | ≥ 0.1.3-alpha.1 | 旧 SDK pin（`0.1.0-rc.x`）；附件面板与 `@` 源早于宿主 `conversation.composer.dock` 槽位。 |
-| 0.6.x | — | 从未发布（已并入 0.5.2/0.5.3），请勿使用。 |
 
 运行环境要求 Node.js ≥ 20（插件开发与实测的下限；harness CLI 本身跑在用户自己的 Node 上）。
 
-`package.json` 里的机器可读兼容记录（`dsh.compatibility`）将 `0.2.0-rc.2` 声明为 compatible，其中 `install` / `start` 两项操作在真实宿主 profile 上验证为 passed（2026-09-29，宿主 `0.2.0-rc.2`）；`uninstall` / `rollback` 如实声明为 unknown（本版本未演练过）。
+`package.json` 里的机器可读兼容记录（`dsh.compatibility`）将 `0.2.0-rc.2` 声明为 compatible，其中 `install` / `start` 两项操作在真实宿主 profile 上验证为 passed（2026-09-29，宿主 `0.2.0-rc.2`）；`uninstall` / `rollback` 如实声明为 unknown（本版本未演练过）。0.6.0 起同时声明 `0.2.1-alpha.3`——维护者日常在跑的 `alpha` 线；该宿主上的操作项未正式演练，保持 unknown。
 
 0.2.0-rc.2 上的实测范围与结论（2026-09-29，本机 `web` profile）：
 
@@ -109,7 +109,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 - 宿主插件契约的改动是**加法**：`dsh-tools` 0.2.0 只新增可选成员（如 `ToolDefinition.projectContent?`、`PreToolDecision.ask.displayReason?`），无破坏性变更
 - 单一反例值得记下：`@deepseek-ai/dsh-client-runtime` 是**独立行**（不是种子模块），插件 `dsh.client.inject` 里声明它要求宿主名册存在该行——官方 0.2.0 名册已移除该行，声明它的客户端插件会整树加载失败。dsh-files 不声明它，故不受影响
 
-本插件跟随维护者本地运行的 `alpha` 线（`0.1.7-alpha.1`）；npm `latest`（撰写时为 `0.1.5-rc.3`）反而更旧，请用上面的 git 方式安装，勿用仓库版本。
+本插件跟随维护者实际在跑的 `alpha` 线（当前 `0.2.1-alpha.3`）；分发走上面的 git 安装——npm 上同名包是无关的第三方占位包。
 
 ## 配置
 
@@ -182,7 +182,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 
 按自动化审查扫描的能力词汇逐项声明：
 
-- **文件**：有。文档解析只读；附件库扫描由宿主进程对 DSH 附件存储只读遍历；导出落盘只走 `ctx.fs`，继承会话沙箱；删除（0.5.7）仅限附件库内 `files/<sha2>/<sha>/` 对象目录，路径由扫描到的 sha 派生、不参与外部路径构造，不触碰存储与会话工作区之外的任何路径。
+- **文件**：有。文档解析只读；附件库扫描由宿主进程对 DSH 附件存储只读遍历；导出落盘只走 `ctx.fs`，继承会话沙箱；删除（0.6.0）仅限附件库内 `files/<sha2>/<sha>/` 对象目录，路径由扫描到的 sha 派生、不参与外部路径构造，不触碰存储与会话工作区之外的任何路径。
 - **网络**：仅同源。客户端半区只调用宿主进程提供的本插件路由 `/plugins/dsh-files/*`。无第三方端点，无遥测。
 - **命令**：一条，仅 macOS——旧版 `.doc` 用 `textutil` 经 `execFile` 转换，二进制固定、参数形状固定、输出走 stdout。无 shell 拼接，不执行用户提供的程序。
 - **凭据**：无。唯一读取的环境变量是 `DSH_HOME`（用于定位附件存储的目录路径，与官方 home 路径解析同语义）——不读任何密钥、令牌、钥匙串。
@@ -194,7 +194,7 @@ dsh plugin --profile web add git+https://github.com/taxueseek/dsh-files.git
 - 解析依赖均为只读维护中库：`pdfjs-dist`（Mozilla 官方）、`mammoth`、`read-excel-file`、`word-extractor`（.doc 兜底）
 - ZIP 中央目录探测不展开任何成员，恶意归档安全拒绝
 - 文件读取与导出落盘走 `ctx.fs`，继承会话沙箱，与内置 read 工具同权；附件库扫描由宿主进程只读执行，路径全部内部拼接
-- 附件下载/导出除经官方 `AttachmentStore.readFileStream`（内容完整性校验、不暴露绝对路径），外再叠 Host 信任栅栏 + `sha256:` 引用白名单 + 尺寸上限；**删除路由（0.5.7 新增，响应公开反馈「只进不出」）**删除范围严格限定在库内对象目录（ref 归一化 + 扫描命中双重确认，路径由内部 sha 拼接），无批量删除与清空接口；内容寻址对象可能被历史消息引用，删除是用户显式动作、不可逆——如需保留请先下载或导出
+- 附件下载/导出除经官方 `AttachmentStore.readFileStream`（内容完整性校验、不暴露绝对路径），外再叠 Host 信任栅栏 + `sha256:` 引用白名单 + 尺寸上限；**删除路由（0.6.0 新增，响应公开反馈「只进不出」）**删除范围严格限定在库内对象目录（ref 归一化 + 扫描命中双重确认，路径由内部 sha 拼接），无批量删除与清空接口；内容寻址对象可能被历史消息引用，删除是用户显式动作、不可逆——如需保留请先下载或导出
 - 面板与 `@` 源均为 UI 层数据：不注入 systemPrompt、不注册模型工具，零 token
 
 ## 开发
