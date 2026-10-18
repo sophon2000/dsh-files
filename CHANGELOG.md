@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5-vh.5.local.20261018.2 (unpublished local candidate)
+
+- Pins the new DSH `0.2.1-rc.2.vh.1.local.20261018.2` family after the Host public declaration dependency fix; Reader runtime and parser dependencies remain unchanged.
+- Preserves local.1 artifacts and their 79 passing Linux tests, 4 Windows skips and reproducible pack as historical evidence. This candidate requires a new lock, checks, digest and fresh Profile qualification.
+
 ## 0.5.5-vh.5.local.20261018.1 (unpublished local candidate)
 
 - Pins runtime peers and development packages to DSH `0.2.1-rc.2.vh.1.local.20261018.1`, Cordis `4.0.5` and Schemastery `3.18.5`; no widened compatibility ranges.

@@ -2,15 +2,15 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.5.local.20261018.1` (local candidate, unpublished)
+- Version: `0.5.5-vh.5.local.20261018.2` (local candidate, unpublished)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.1-rc.2.vh.1.local.20261018.1`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Candidate host: DSH `0.2.1-rc.2.vh.1.local.20261018.2`, Cordis `4.0.5`, Schemastery `3.18.5`
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; this candidate has not been published
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
 - Integration: two-parent merge of that fork parent and the exact original-upstream commit above
 - Shared upstream ancestor: `8f2d0bdf874b3e30ff19b40ab3f19a8a50e168a0` (`0.5.3`)
-- Current candidate parent: `9ae65c0eb7271343d95a4b1e5874b2e91c0010ba` (vh.4 qualification source); the previous archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
+- Current candidate parent: `47b9abdc61548d2f5e9a0a2ecdbbbad0d67f0b7f` (local.1); its immutable tarball and qualification evidence are preserved. The earlier vh.4 archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
 - Local candidate dependencies: clean DSH rc.2-based candidate tarballs, served by an explicitly configured local registry; exact versions and artifact integrity must be locked before qualification, with no assumed release URLs
 
 ## Upstream 0.5.5 reconciliation
@@ -21,7 +21,7 @@ No `read_document`, detection or parser implementation changed upstream across t
 
 ## DSH rc.2 candidate compatibility
 
-`0.5.5-vh.5.local.20261018.1` adapts exact Host/vendor pins for the rc.2-based Video candidate. `ensureForExecution(exec)` remains mandatory: the Host authorizer and Reader must resolve the same validated directory for one execution, including cancellation and directory-change races. Do not replace it with a session header or a fresh mutable cwd read. Parser dependencies, read budgets, Worker termination and the no-op client remain unchanged.
+`0.5.5-vh.5.local.20261018.2` adapts exact Host/vendor pins for the rc.2-based Video candidate. `ensureForExecution(exec)` remains mandatory: the Host authorizer and Reader must resolve the same validated directory for one execution, including cancellation and directory-change races. Do not replace it with a session header or a fresh mutable cwd read. Parser dependencies, read budgets, Worker termination and the no-op client remain unchanged.
 
 This is a new local candidate, not a repack under the previous version or a published release. Previous build/test/audit/Profile results are historical observations only. Generate the new lock from the actual supplied candidate registry and complete the original checks before claiming compatibility. No Windows or paid-provider run is part of this Linux preparation.
 
@@ -77,7 +77,7 @@ Release gates:
 3. production-only audit review
 4. two packs with matching SHA-256 in the same toolchain
 5. tarball allowlist inspection: no attachment-loop/client UI modules
-6. install into a fresh DSH `0.2.1-rc.2.vh.1.local.20261018.1` profile
+6. install into a fresh DSH `0.2.1-rc.2.vh.1.local.20261018.2` profile
 7. real tool calls for text, PDF, DOC, DOCX, XLSX, paging, cancellation, invalid arguments and current working-directory changes
 
 The current production audit reports one moderate advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), in the retained `mammoth > argparse > sprintf-js@1.0.3` chain. The [official CVE record](https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/97xxx/CVE-2026-97058.json) marks its `CVE-2026-97058` identity REJECTED by the CNA on 2026-10-12; the GitHub/npm audit data had not synchronized at the 2026-10-18 observation. npm still publishes latest `1.1.3`, with no `1.1.4` release, so the audit's patched range is not an available upgrade.
