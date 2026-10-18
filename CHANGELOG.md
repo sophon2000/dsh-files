@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5-vh.5.local.20261018.1 (unpublished local candidate)
+
+- Pins runtime peers and development packages to DSH `0.2.1-rc.2.vh.1.local.20261018.1`, Cordis `4.0.5` and Schemastery `3.18.5`; no widened compatibility ranges.
+- Preserves the execution-scoped `ensureForExecution` contract, bounded parser implementations, cancellation and no-op client.
+- Uses a new artifact identity; no previous vh.4 archive digest or qualification is inherited. Frozen installation, build/typecheck/regression, reproducible pack and real Profile qualification must complete on the new candidate.
+
 ## 0.5.5-vh.4 (unpublished local candidate)
 
 - Keeps DSH `0.2.1-alpha.2.vh.3`, every parser dependency and the vh.3 runtime implementation fixed; preserves the earlier artifact rather than overwriting it.
