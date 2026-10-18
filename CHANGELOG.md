@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.5-vh.3 (unpublished local candidate)
+
+- Pins runtime peers and development packages to DSH `0.2.1-alpha.2.vh.3` for the native Windows Desktop successor.
+- Preserves the `0.5.5` upstream baseline, third-party parser versions and bounded read-only behavior.
+- Retains the pinned Skia native binding in the Windows parent process to prevent the reproduced Host crash during parser Worker replacement; no document parsing or system-font scan runs in the parent.
+- Adds a real compiled-parser child-process regression covering thirty fresh Worker reads; existing cancellation, timeout, malformed-response and heap-limit checks remain unchanged.
+- Matches the Worker's native-library selection independently of host environment overrides and preserves text reading when optional canvas or its native binary is unavailable, with subprocess regressions for both cases.
+- Launches the pinned pnpm and bundled npm JavaScript entry points for shell-free artifact qualification on Windows.
+- Uses a new immutable artifact identity; qualification of this candidate is recorded separately from vh.2.
+
 ## 0.5.5-vh.2 (unpublished local candidate)
 
 - Targets DSH `0.2.1-alpha.2.vh.2` with Cordis `4.0.5-alpha.1` and Schemastery `3.18.5-alpha.1`; the Reader upstream baseline remains `0.5.5`.

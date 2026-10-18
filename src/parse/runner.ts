@@ -1,15 +1,45 @@
 import { Worker } from 'node:worker_threads'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import type { ParseRequest } from './worker.ts'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import type { windowLines } from './text.ts'
 
 export type ParseWindow = ReturnType<typeof windowLines>
 
+// The pinned Skia addon can crash on Windows when its final environment is a
+// terminating Worker. Keep one parent environment alive for the process lifetime.
+// Load only the binding: no system-font scan or document parsing in the parent.
+let windowsParserBinding: unknown
+function retainWindowsParserBinding(): void {
+  if (process.platform !== 'win32' || windowsParserBinding !== undefined) return
+  windowsParserBinding = null
+  const require = createRequire(import.meta.url)
+  const pdfRequire = createRequire(require.resolve('pdfjs-dist/legacy/build/pdf.mjs'))
+  let canvasEntry: string
+  try { canvasEntry = pdfRequire.resolve('@napi-rs/canvas') }
+  catch { return } // PDF.js tolerates this optional dependency being absent.
+  const canvasRequire = createRequire(canvasEntry)
+  if (!['x64', 'ia32', 'arm64'].includes(process.arch)) return
+  const variables = process.config.variables
+  const abi = process.arch === 'x64' && (('shlib_suffix' in variables && variables.shlib_suffix === 'dll.a')
+    || ('node_target_type' in variables && variables.node_target_type === 'shared_library')) ? 'gnu' : 'msvc'
+  const target = `win32-${process.arch}-${abi}`
+  // Match the pinned loader's native candidates under the Worker's env: {}.
+  // Calling js-binding.js here would honor unrelated host NAPI_RS_* overrides.
+  const canvasDirectory = dirname(canvasEntry)
+  for (const candidate of [join(canvasDirectory, `skia.${target}.node`), `@napi-rs/canvas-${target}`]) {
+    try { windowsParserBinding = canvasRequire(candidate); return }
+    catch { /* Like PDF.js, keep non-canvas formats usable if the addon is unavailable. */ }
+  }
+}
+
 // workerUrl is an internal test seam, never a Tool or Profile parameter.
 export async function runParser(request: ParseRequest, signal: AbortSignal,
   workerUrl = new URL(import.meta.url.endsWith('.ts') ? './worker.ts' : './worker.js', import.meta.url)
 ): Promise<ParseWindow> {
   if (signal.aborted) throw new FsError('read_document aborted', 'FS_ABORTED')
+  retainWindowsParserBinding()
   const worker = new Worker(workerUrl, {
     workerData: request,
     env: {}, // No provider credentials passed to parser dependencies.

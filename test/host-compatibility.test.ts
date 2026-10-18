@@ -5,11 +5,11 @@ import { createRequire } from 'node:module'
 import { access, readFile } from 'node:fs/promises'
 
 const require = createRequire(import.meta.url)
-const hostVersion = '0.2.1-alpha.2.vh.2'
+const hostVersion = '0.2.1-alpha.2.vh.3'
 
 test('development and runtime peers use one exact alpha2 fork family', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-  assert.equal(pkg.version, '0.5.5-vh.2')
+  assert.equal(pkg.version, '0.5.5-vh.3')
   for (const name of ['@deepseek-ai/dsh-fs', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-system-prompt', '@deepseek-ai/dsh-working-directory']) {
     assert.equal(pkg.peerDependencies[name], hostVersion, `${name} runtime peer`)
   }

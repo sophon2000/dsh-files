@@ -9,9 +9,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
-const run = async (command, args) => (await promisify(execFile)(command, args, {
-  cwd, timeout: 120000, maxBuffer: 8 * 1024 * 1024
-})).stdout;
+const run = async (command, args) => {
+  // Windows .cmd shims cannot be launched by shell-free execFile. Use Node's
+  // bundled npm entry points; npx selects this checkout's exact pnpm version.
+  if (process.platform === 'win32' && (command === 'pnpm' || command === 'npm')) {
+    const npmBin = path.join(path.dirname(process.execPath), 'node_modules/npm/bin');
+    if (command === 'pnpm') {
+      assert.match(pkg.packageManager, /^pnpm@\d+\.\d+\.\d+$/u);
+      args = [path.join(npmBin, 'npx-cli.js'), '--yes', pkg.packageManager, ...args];
+    } else args = [path.join(npmBin, 'npm-cli.js'), ...args];
+    command = process.execPath;
+  }
+  return (await promisify(execFile)(command, args, {
+    cwd, timeout: 120000, maxBuffer: 8 * 1024 * 1024
+  })).stdout;
+};
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 assert.notEqual(process.env.DSH_FILES_FOLDER_UPLOAD, '1', 'only the default read-only build is qualified');
 const root = await mkdtemp(path.join(tmpdir(), 'dsh-files-artifact-'));
