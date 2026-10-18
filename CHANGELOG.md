@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.5-vh.4 (unpublished local candidate)
+
+- Keeps DSH `0.2.1-alpha.2.vh.3`, every parser dependency and the vh.3 runtime implementation fixed; preserves the earlier artifact rather than overwriting it.
+- Runs Profile qualification through shell-free JavaScript commands and cooperative Windows shutdown, with platform PATH separation and new evidence directories.
+- Retains the eighteen existing real Tool cases and adds DOC extraction plus directory-change/restoration reads.
+- Records raw production audit results and a narrowly authorized disposition for CNA-rejected `CVE-2026-97058`; fresh official identity/status evidence is mandatory, and all other or changed findings still block qualification.
+
+## 0.5.5-vh.3 (unpublished local candidate)
+
+- Pins runtime peers and development packages to DSH `0.2.1-alpha.2.vh.3` for the native Windows Desktop successor.
+- Preserves the `0.5.5` upstream baseline, third-party parser versions and bounded read-only behavior.
+- Retains the pinned Skia native binding in the Windows parent process to prevent the reproduced Host crash during parser Worker replacement; no document parsing or system-font scan runs in the parent.
+- Adds a real compiled-parser child-process regression covering thirty fresh Worker reads; existing cancellation, timeout, malformed-response and heap-limit checks remain unchanged.
+- Matches the Worker's native-library selection independently of host environment overrides and preserves text reading when optional canvas or its native binary is unavailable, with subprocess regressions for both cases.
+- Launches the pinned pnpm and bundled npm JavaScript entry points for shell-free artifact qualification on Windows.
+- Uses a new immutable artifact identity; qualification of this candidate is recorded separately from vh.2.
+
+## 0.5.5-vh.2 (unpublished local candidate)
+
+- Targets DSH `0.2.1-alpha.2.vh.2` with Cordis `4.0.5-alpha.1` and Schemastery `3.18.5-alpha.1`; the Reader upstream baseline remains `0.5.5`.
+- Shares the native `workingDirectory.ensureForExecution()` snapshot with Host authorization, so a directory change cannot retarget an authorized read; subsequent calls follow the new directory and cancellation and validation failures propagate.
+- Removes the retired `dsh-invariants` development dependency and types the Cordis plugin context.
+- Retains bounded parsers, read-only client and immutable source/artifact qualification.
+
 ## 0.5.5-vh.1 (unpublished local candidate)
 
 - Merges original `taxueseek/dsh-files` upstream `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9` with the preserved `0.5.3-vh.3` fork parent.

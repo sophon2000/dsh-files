@@ -5,13 +5,19 @@ import { createRequire } from 'node:module'
 import { access, readFile } from 'node:fs/promises'
 
 const require = createRequire(import.meta.url)
-const hostVersion = '0.2.0-rc.2.vh.1'
+const hostVersion = '0.2.1-alpha.2.vh.3'
 
-test('development and runtime peers use one exact rc2 fork family', async () => {
+test('development and runtime peers use one exact alpha2 fork family', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-  assert.equal(pkg.version, '0.5.5-vh.1')
-  for (const name of ['@deepseek-ai/dsh-fs', '@deepseek-ai/dsh-tools']) {
+  assert.equal(pkg.version, '0.5.5-vh.4')
+  for (const name of ['@deepseek-ai/dsh-fs', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-system-prompt', '@deepseek-ai/dsh-working-directory']) {
     assert.equal(pkg.peerDependencies[name], hostVersion, `${name} runtime peer`)
+  }
+  assert.equal(pkg.devDependencies['@deepseek-ai/dsh-invariants'], undefined)
+  for (const [name, version] of [['@deepseek-ai/cordis', '4.0.5-alpha.1'], ['@deepseek-ai/schemastery', '3.18.5-alpha.1']]) {
+    assert.equal(pkg.peerDependencies[name], version, `${name} runtime peer`)
+    assert.equal(pkg.devDependencies[name], version, `${name} development pin`)
+    assert.equal(require(`${name}/package.json`).version, version, `${name} installed version`)
   }
   const hostDependencies = Object.entries(pkg.devDependencies)
     .filter(([name]) => name.startsWith('@deepseek-ai/dsh-'))

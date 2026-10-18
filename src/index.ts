@@ -8,6 +8,8 @@
 // ablation on 2026-09-05 (plugin disabled, service stable, zero cross-plugin
 // deps) proved the remaining value is the parser.
 
+import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import z from '@deepseek-ai/schemastery'
 import { defineReadDocumentTool } from './tool.ts'
 import { DEFAULT_PARSE_LIMITS, parseLimits, type ParseLimits } from './parse/limits.ts'
@@ -16,7 +18,7 @@ import { DEFAULT_PARSE_LIMITS, parseLimits, type ParseLimits } from './parse/lim
 export const name = 'dsh-files'
 
 /** Services required by this plugin. */
-export const inject = ['tools', 'fs', 'systemPrompt']
+export const inject = ['tools', 'fs', 'systemPrompt', 'workingDirectory']
 
 const MEBIBYTE = 1024 * 1024
 
@@ -56,7 +58,7 @@ export const Config = z.object({
   }).default(DEFAULT_PARSE_LIMITS)
 })
 
-export function apply(ctx: any, config: DocsConfig): void {
+export function apply(ctx: Context, config: DocsConfig): void {
   const parser = parseLimits(config.parser)
   for (const [label, value] of [
     ['maxFileBytes', config.maxFileBytes],
