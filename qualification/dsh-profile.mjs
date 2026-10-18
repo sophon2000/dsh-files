@@ -6,12 +6,14 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { delimiter,dirname,join,resolve } from 'node:path';
+import { reviewConsumerAudit,fetchWithdrawalAuthority,withdrawnGhsa } from './audit-disposition.mjs';
 const [hostArg,artifactArg,rootArg]=process.argv.slice(2);
 if (!hostArg || !artifactArg) throw new Error('Usage: node qualification/dsh-profile.mjs <DSH plugins root> <absolute tgz> [new evidence directory]');
 const host=await realpath(hostArg);
 const artifact=await realpath(artifactArg);
 const created=rootArg ?? await mkdtemp(`${tmpdir()}/dsh-files-fork-qualification-`);
-await mkdir(created,{recursive:true});
+if(rootArg) await mkdir(created); // An explicit evidence path must also be new.
 const root=await realpath(created);
 const { environmentWithoutSecrets,startLoggedProcess,stopProcess,waitForOutput,waitForHttpReady,rpc,history,authenticatedWebHeaders }=await import(pathToFileURL(`${host}/tests/integration/harness.ts`).href);
 const { replaySession }=await import(pathToFileURL(`${host}/tests/integration/replay-session.ts`).href);
@@ -19,12 +21,43 @@ const require=createRequire(import.meta.url);
 const hostRequire=createRequire(`${host}/package.json`);
 const JSZip=require('jszip');
 const yaml=hostRequire('js-yaml');
-const env=environmentWithoutSecrets({DSH_HOME:`${root}/dsh-home`,DSH_AGENTS_HOME:`${root}/agents`,PATH:`${host}/node_modules/.bin:${process.env.PATH}`,npm_config_ignore_scripts:'true'});
+const dshManifest=hostRequire.resolve('@deepseek-ai/dsh/package.json');
+const dshPackage=JSON.parse(await readFile(dshManifest,'utf8'));
+const dshBin=typeof dshPackage.bin==='string'?dshPackage.bin:dshPackage.bin?.dsh;
+assert.equal(typeof dshBin,'string','installed Host must expose its DSH JavaScript bin');
+const dshArgs=[resolve(dirname(dshManifest),dshBin)];
+const registryEnvironment={};
+for(const name of ['PNPM_CONFIG_REGISTRY','NPM_CONFIG_REGISTRY','npm_config_registry']) {
+ if(!process.env[name])continue;
+ const url=new URL(process.env[name]);
+ assert.ok((url.protocol==='https:'||(url.protocol==='http:'&&url.hostname==='127.0.0.1'))&&!url.username&&!url.password&&!url.search&&!url.hash,'qualification registry must not carry credentials');
+ registryEnvironment[name]=url.href;
+}
+const runtimeEnvironment=()=>environmentWithoutSecrets({DSH_HOME:`${root}/dsh-home`,DSH_AGENTS_HOME:`${root}/agents`,PATH:[join(host,'node_modules/.bin'),process.env.PATH??''].join(delimiter)});
+const env={...runtimeEnvironment(),...registryEnvironment,npm_config_ignore_scripts:'true'};
 console.log('Isolated evidence directory:',root);
-await promisify(execFile)(`${host}/node_modules/.bin/dsh`,['plugin','--profile','web','add',artifact],{cwd:root,env,timeout:120000,maxBuffer:4*1024*1024});
-const audit=await promisify(execFile)(process.execPath,[`${host}/node_modules/pnpm/bin/pnpm.cjs`,'--dir',`${root}/dsh-home/profiles/web`,'audit','--prod','--json'],{env,timeout:60000,maxBuffer:4*1024*1024});
+await promisify(execFile)(process.execPath,[...dshArgs,'plugin','--profile','web','add',artifact],{cwd:root,env,timeout:120000,maxBuffer:4*1024*1024});
+let audit;
+try {
+ audit=await promisify(execFile)(process.execPath,[`${host}/node_modules/pnpm/bin/pnpm.cjs`,'--dir',`${root}/dsh-home/profiles/web`,'audit','--prod','--json','--registry=https://registry.npmjs.org'],{env,timeout:60000,maxBuffer:4*1024*1024});
+} catch(error) {
+ if(error.code!==1||typeof error.stdout!=='string')throw error;
+ audit={stdout:error.stdout};
+}
 await writeFile(`${root}/consumer-audit.json`,audit.stdout);
-assert.equal(Object.keys(JSON.parse(audit.stdout).advisories??{}).length,0,'consumer dependency audit must pass');
+const auditResult=JSON.parse(audit.stdout);
+assert.ok(auditResult.metadata?.vulnerabilities,'consumer audit must return a complete vulnerability report');
+let authority;
+if(Object.values(auditResult.advisories??{}).some(item=>item.github_advisory_id===withdrawnGhsa)){
+ try {authority=await fetchWithdrawalAuthority();}
+ catch(error){authority={error:String(error)};}
+ await writeFile(`${root}/consumer-audit-authority.json`,JSON.stringify(authority,null,2));
+}
+const auditReview=reviewConsumerAudit(auditResult,authority);
+await writeFile(`${root}/consumer-audit-review.json`,JSON.stringify(auditReview,null,2));
+const auditPassed=auditReview.passed;
+// Independent real-Tool evidence never waives unresolved audit findings. The
+// single human-authorized CNA rejection preserves the original raw audit report.
 const licenses=await promisify(execFile)(process.execPath,[`${host}/node_modules/pnpm/bin/pnpm.cjs`,'--dir',`${root}/dsh-home/profiles/web`,'licenses','list','--prod','--json'],{env,timeout:60000,maxBuffer:4*1024*1024});
 // Package metadata inventory, not legal clearance. pnpm's reported virtual-store
 // paths may not exist in DSH's materialized node_modules, so do not present them as file evidence.
@@ -59,6 +92,9 @@ const xref=Buffer.byteLength(pdf);
 pdf+=`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(n=>`${String(n).padStart(10,'0')} 00000 n \n`).join('')}trailer\n<< /Root 1 0 R /Size 6 >>\nstartxref\n${xref}\n%%EOF\n`;
 await writeFile(`${ws}/sample.pdf`,pdf);
 await writeFile(`${ws}/文本.txt`,'alpha\nbeta\ngamma\n');
+await writeFile(`${ws}/法规.doc`,await readFile(new URL('../test/fixtures/sanming-dog-regulation.doc',import.meta.url)));
+await mkdir(`${ws}/另一 目录`);
+await writeFile(`${ws}/另一 目录/文本.txt`,'CURRENT_DIRECTORY_OK\n');
 await writeFile(`${ws}/large.txt`,'x'.repeat(25*1024*1024));
 await writeFile(`${ws}/fake.xlsx`,Buffer.from([0x4d,0x5a,0,1,2,0]));
 await writeFile(`${ws}/blocked.txt`,'POLICY_SENTINEL_MUST_NOT_LEAK');
@@ -75,6 +111,7 @@ const cases=[
  ['rowcap',{file_path:'分镜.xlsx'}],
  ['text',{file_path:'文本.txt',offset:2,limit:1}],
  ['docx',{file_path:'需求.docx'}],
+ ['doc',{file_path:'法规.doc'}],
  ['pdf',{file_path:'sample.pdf'}],
  ['fake',{file_path:'fake.xlsx'}],
  ['missing',{file_path:'missing.xlsx'}],
@@ -86,6 +123,10 @@ const cases=[
  ['outside',{file_path:`${root}/outside.txt`}],
  ['symlink',{file_path:'outside-link.txt'}],
  ['native_read',{file_path:`${root}/outside.txt`},'read'],
+ ['change_cwd',{cd:'另一 目录'},'working_directory'],
+ ['read_changed_cwd',{file_path:'文本.txt'}],
+ ['restore_cwd',{cd:ws},'working_directory'],
+ ['read_restored_cwd',{file_path:'文本.txt'}],
 ];
 const rows=[{type:'session',version:0,id:'document-qualification',createdAt:1,cwd:'{{cwd}}',delegationDepth:0}];
 cases.forEach(([id,args,name='read_document'],index)=>{
@@ -107,7 +148,9 @@ await writeFile(`${root}/overlay.yml`,yaml.dump([
  {id:'session-title-llm',name:'@deepseek-ai/dsh-session-title-first-prompt-llm',disabled:true},
  {insert:[{id:'qualification-deny',name:`${root}/deny.mjs`},{id:'llm-replay',name:hostRequire.resolve('@deepseek-ai/dsh-llm-replay'),config:{file:`${root}/replay.jsonl`,providers:[{id:'deepseek-official',name:'Replay',models:[{id:'deepseek-v4-flash',contextWindow:128000,inputModalities:['text']}]}]}}]}
 ],{noRefs:true}));
-const start=()=>startLoggedProcess(`${host}/node_modules/.bin/dsh`,['--profile','web','--patch',`${root}/overlay.yml`,'--no-open','--host','127.0.0.1','--port','0'],{cwd:ws,env:environmentWithoutSecrets({DSH_HOME:`${root}/dsh-home`,DSH_AGENTS_HOME:`${root}/agents`,PATH:`${host}/node_modules/.bin:${process.env.PATH}`})});
+const start=()=>process.platform==='win32'
+ ? startLoggedProcess(process.execPath,[join(host,'scripts/profile-process.mjs'),JSON.stringify({profile:'web',patchFiles:[`${root}/overlay.yml`],args:['--no-open','--host','127.0.0.1','--port','0']})],{cwd:ws,env:runtimeEnvironment()},true)
+ : startLoggedProcess(process.execPath,[...dshArgs,'--profile','web','--patch',`${root}/overlay.yml`,'--no-open','--host','127.0.0.1','--port','0'],{cwd:ws,env:runtimeEnvironment()});
 let proc=start();
 try {
  const launch=await waitForOutput(proc,/dsh web: (http:\/\/[^\s]+)/u,30000);
@@ -126,7 +169,7 @@ try {
  const events=result.events.filter(e=>e.event.type==='tool/result');
  assert.equal(events.length,cases.length,'all calls must produce real Tool results');
  const results=new Map(events.map(e=>{const d=e.event.data;const r=d.message;return [r.toolCallId,{error:r.isError,text:r.content.map(c=>c.text??'').join('\n'),meta:d.meta,code:d.error?.code}];}));
- for(const id of ['native_upload','sheets','sheet2','page','rowcap','text','docx','pdf','outside','symlink','native_read'])assert.equal(results.get(id).error,false,id);
+ for(const id of ['native_upload','sheets','sheet2','page','rowcap','text','docx','doc','pdf','outside','symlink','native_read','change_cwd','read_changed_cwd','restore_cwd','read_restored_cwd'])assert.equal(results.get(id).error,false,id);
  for(const id of ['fake','missing','oversize','bad_sheet','conflict','bad_offset','denied'])assert.equal(results.get(id).error,true,id);
  assert.match(results.get('sheets').text,/1\. 分镜\n2\. 配音/);
  for(const id of ['native_upload','sheet2'])assert.match(results.get(id).text,/HELLO_VOICE/);
@@ -135,6 +178,9 @@ try {
  assert.match(results.get('rowcap').text,/第一行 第二行/);
  assert.equal(results.get('text').meta.lines[0].text,'beta');
  assert.match(results.get('docx').text,/DOCX_OK/);assert.match(results.get('pdf').text,/PDF_OK/);
+ assert.match(results.get('doc').text,/养犬管理条例/);assert.match(results.get('doc').text,/第一条/);
+ assert.equal(results.get('read_changed_cwd').meta.lines[0].text,'CURRENT_DIRECTORY_OK');
+ assert.equal(results.get('read_restored_cwd').meta.lines[0].text,'alpha');
  assert.equal(results.get('fake').code,'FS_NOT_TEXT');assert.equal(results.get('missing').code,'FS_NOT_FOUND');assert.equal(results.get('oversize').code,'FS_TOO_LARGE');
  assert.doesNotMatch(JSON.stringify(result),/POLICY_SENTINEL_MUST_NOT_LEAK/);
  for(const id of ['outside','symlink','native_read'])assert.match(results.get(id).text,/SYNTHETIC_OUTSIDE/);
@@ -145,7 +191,8 @@ try {
  const coldBase=await waitForHttpReady(coldLaunch,15000);
  const cold=await history(coldBase,session.sessionId);
  assert.deepEqual(cold.events.filter(e=>e.event.type==='tool/result'),events);
- const summary={artifactSha256:createHash('sha256').update(await readFile(artifact)).digest('hex'),sessionId:session.sessionId,toolCases:cases.length,nativeUpload:true,foreignReceiptDenied:true,policyDenied:true,sourceUnchanged:true,coldHistoryIdentical:true,results:[...results].map(([id,r])=>({id,isError:r.error,code:r.code}))};
+ const summary={artifactSha256:createHash('sha256').update(await readFile(artifact)).digest('hex'),hostVersion:dshPackage.version,sessionId:session.sessionId,toolCases:cases.length,toolCasesPassed:true,consumerAuditPassed:auditReview.rawAuditPassed,consumerAuditReviewPassed:auditPassed,withdrawnAuditFindings:auditReview.withdrawn,nativeUpload:true,foreignReceiptDenied:true,policyDenied:true,sourceUnchanged:true,currentDirectoryChanges:true,coldHistoryIdentical:true,results:[...results].map(([id,r])=>({id,isError:r.error,code:r.code}))};
  await writeFile(`${root}/summary.json`,JSON.stringify(summary,null,2));
  console.log(JSON.stringify(summary,null,2));
+ assert.equal(auditPassed,true,'consumer dependency audit review must pass; unresolved findings are not waived by Tool evidence');
 } finally {await stopProcess(proc);await writeFile(`${root}/verify.log`,proc.output().replace(/(token=)[^\s&]+/g,'$1[redacted]'));}

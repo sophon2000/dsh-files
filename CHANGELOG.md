@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.5-vh.4 (unpublished local candidate)
+
+- Keeps DSH `0.2.1-alpha.2.vh.3`, every parser dependency and the vh.3 runtime implementation fixed; preserves the earlier artifact rather than overwriting it.
+- Runs Profile qualification through shell-free JavaScript commands and cooperative Windows shutdown, with platform PATH separation and new evidence directories.
+- Retains the eighteen existing real Tool cases and adds DOC extraction plus directory-change/restoration reads.
+- Records raw production audit results and a narrowly authorized disposition for CNA-rejected `CVE-2026-97058`; fresh official identity/status evidence is mandatory, and all other or changed findings still block qualification.
+
 ## 0.5.5-vh.3 (unpublished local candidate)
 
 - Pins runtime peers and development packages to DSH `0.2.1-alpha.2.vh.3` for the native Windows Desktop successor.
