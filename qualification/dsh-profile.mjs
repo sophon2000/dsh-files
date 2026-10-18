@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { delimiter,dirname,join,resolve } from 'node:path';
 import { reviewConsumerAudit,fetchWithdrawalAuthority,withdrawnGhsa } from './audit-disposition.mjs';
+import { assertInFlightCancellation } from './worker-observer.mjs';
 const [hostArg,artifactArg,rootArg]=process.argv.slice(2);
 if (!hostArg || !artifactArg) throw new Error('Usage: node qualification/dsh-profile.mjs <DSH plugins root> <absolute tgz> [new evidence directory]');
 const host=await realpath(hostArg);
@@ -37,14 +38,17 @@ const runtimeEnvironment=()=>environmentWithoutSecrets({DSH_HOME:`${root}/dsh-ho
 const env={...runtimeEnvironment(),...registryEnvironment,npm_config_ignore_scripts:'true'};
 console.log('Isolated evidence directory:',root);
 await promisify(execFile)(process.execPath,[...dshArgs,'plugin','--profile','web','add',artifact],{cwd:root,env,timeout:120000,maxBuffer:4*1024*1024});
-let audit;
+let audit;let auditExitCode=0;
+const auditArgs=[`${host}/node_modules/pnpm/bin/pnpm.cjs`,'--dir',`${root}/dsh-home/profiles/web`,'audit','--prod','--json','--registry=https://registry.npmjs.org'];
 try {
- audit=await promisify(execFile)(process.execPath,[`${host}/node_modules/pnpm/bin/pnpm.cjs`,'--dir',`${root}/dsh-home/profiles/web`,'audit','--prod','--json','--registry=https://registry.npmjs.org'],{env,timeout:60000,maxBuffer:4*1024*1024});
+ audit=await promisify(execFile)(process.execPath,auditArgs,{env,timeout:60000,maxBuffer:4*1024*1024});
 } catch(error) {
  if(error.code!==1||typeof error.stdout!=='string')throw error;
- audit={stdout:error.stdout};
+ auditExitCode=1;audit={stdout:error.stdout,stderr:error.stderr??''};
 }
 await writeFile(`${root}/consumer-audit.json`,audit.stdout);
+await writeFile(`${root}/consumer-audit.stderr`,audit.stderr??'');
+await writeFile(`${root}/consumer-audit-command.json`,JSON.stringify({executable:process.execPath,args:auditArgs,exitCode:auditExitCode,stdoutSha256:createHash('sha256').update(audit.stdout).digest('hex'),stderrSha256:createHash('sha256').update(audit.stderr??'').digest('hex')},null,2));
 const auditResult=JSON.parse(audit.stdout);
 assert.ok(auditResult.metadata?.vulnerabilities,'consumer audit must return a complete vulnerability report');
 let authority;
@@ -83,6 +87,11 @@ docx.file('[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org
 docx.file('_rels/.rels','<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
 docx.file('word/document.xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>文档测试 DOCX_OK</w:t></w:r></w:p></w:body></w:document>');
 await writeFile(`${ws}/需求.docx`,await docx.generateAsync({type:'nodebuffer'}));
+// Valid, uncompressed DOCX keeps the actual parser busy while cancellation is
+// issued after its real Worker is online. No parser/Worker replacement or delay.
+docx.file('word/document.xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+Array.from({length:20000},(_,i)=>`<w:p><w:r><w:t>Cancellation paragraph ${i} ${i*17}</w:t></w:r></w:p>`).join('')+'</w:body></w:document>');
+await writeFile(`${ws}/cancel.docx`,await docx.generateAsync({type:'nodebuffer',compression:'STORE'}));
+const cancelDigest=createHash('sha256').update(await readFile(`${ws}/cancel.docx`)).digest('hex');
 // Tiny, deterministic one-page PDF, no external assets or parser used to create it.
 const stream='BT /F1 12 Tf 30 100 Td (PDF_OK) Tj ET';
 const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
@@ -139,8 +148,22 @@ cases.forEach(([id,args,name='read_document'],index)=>{
  ]) rows.push({type:'assistant/chunk',data:{turn:1,step,chunk}});
 });
 for(const chunk of [{type:'block-start',index:0,blockType:'text'},{type:'text-delta',index:0,text:'QUALIFICATION_DONE'},{type:'block-end',index:0,block:{type:'text',text:'QUALIFICATION_DONE'}},{type:'finish',reason:{kind:'stop'}}])rows.push({type:'assistant/chunk',data:{turn:1,step:cases.length+1,chunk}});
+for(const [turn,id,args] of [[2,'cancel_one',{file_path:'cancel.docx'}],[3,'cancel_two',{file_path:'cancel.docx'}],[4,'after_cancel',{file_path:'文本.txt'}]]){
+ const name='read_document';
+ for(const chunk of [{type:'block-start',index:0,blockType:'tool-call'},{type:'tool-call-delta',index:0,id,name,argumentsDelta:JSON.stringify(args)},{type:'block-end',index:0,block:{type:'tool-call',id,name,arguments:JSON.stringify(args)}},{type:'finish',reason:{kind:'tool-calls'}}])rows.push({type:'assistant/chunk',data:{turn,step:1,chunk}});
+}
+// Aborted calls consume exactly one model response. Only the recovery call has
+// a subsequent model response; an unexpected continuation must fail qualification.
+for(const chunk of [{type:'block-start',index:0,blockType:'text'},{type:'text-delta',index:0,text:'CANCEL_RECOVERY_DONE'},{type:'block-end',index:0,block:{type:'text',text:'CANCEL_RECOVERY_DONE'}},{type:'finish',reason:{kind:'stop'}}])rows.push({type:'assistant/chunk',data:{turn:4,step:2,chunk}});
 await writeFile(`${root}/replay.jsonl`,replaySession(rows));
-await writeFile(`${root}/deny.mjs`,"export const inject=['tools']; export function apply(ctx){ctx.on('tools/pre-execute',async(exec,next)=>exec.name==='read_document'&&exec.arguments.file_path==='blocked.txt'?{kind:'deny',reason:'qualification deliberate denial'}:next());}\n");
+await writeFile(`${root}/deny.mjs`,[
+ "import {writeFileSync,readFileSync,appendFileSync} from 'node:fs';",
+ `import {observeCancellationSignal} from ${JSON.stringify(new URL('./worker-observer.mjs',import.meta.url).href)};`,
+ `const root=${JSON.stringify(root)};`,
+ "export const inject=['tools']; export function apply(ctx){",
+ "ctx.on('tools/pre-execute',async(exec,next)=>{if(exec.name==='read_document'&&exec.arguments.file_path==='blocked.txt')return {kind:'deny',reason:'qualification deliberate denial'};if(exec.name==='read_document'&&exec.arguments.file_path==='cancel.docx'){writeFileSync(root+'/worker-arm.json',JSON.stringify({id:exec.callId}));observeCancellationSignal(root,exec.callId,exec.signal);}return next();});",
+ "ctx.on('tools/result',(exec,result)=>{if(exec.name!=='read_document'||exec.arguments.file_path!=='cancel.docx')return;const events=readFileSync(root+'/worker-lifetime.jsonl','utf8').trim().split('\\n').map(JSON.parse).filter(e=>e.id===exec.callId);appendFileSync(root+'/cancellation-results.jsonl',JSON.stringify({id:exec.callId,aborted:exec.signal.aborted,isError:result.isError,code:result.error?.info?.code,workerExited:events.some(e=>e.type==='exit'),at:Date.now()})+'\\n');});}",
+ ].join('\n'));
 await writeFile(`${root}/overlay.yml`,yaml.dump([
  {id:'llm-deepseek',name:'@deepseek-ai/dsh-llm-deepseek-api-key',disabled:true},
  {id:'llm-deepseek-account',name:'@deepseek-ai/dsh-llm-deepseek-account',disabled:true},
@@ -148,9 +171,11 @@ await writeFile(`${root}/overlay.yml`,yaml.dump([
  {id:'session-title-llm',name:'@deepseek-ai/dsh-session-title-first-prompt-llm',disabled:true},
  {insert:[{id:'qualification-deny',name:`${root}/deny.mjs`},{id:'llm-replay',name:hostRequire.resolve('@deepseek-ai/dsh-llm-replay'),config:{file:`${root}/replay.jsonl`,providers:[{id:'deepseek-official',name:'Replay',models:[{id:'deepseek-v4-flash',contextWindow:128000,inputModalities:['text']}]}]}}]}
 ],{noRefs:true}));
+const observerArgs=['--import',new URL('./worker-observer.mjs',import.meta.url).href];
+const observerEnvironment=()=>({...runtimeEnvironment(),DSH_READER_OBSERVER_ROOT:root,DSH_READER_OBSERVER_RUNNER:`${root}/dsh-home/profiles/web/node_modules/dsh-files/lib/parse/runner.js`});
 const start=()=>process.platform==='win32'
- ? startLoggedProcess(process.execPath,[join(host,'scripts/profile-process.mjs'),JSON.stringify({profile:'web',patchFiles:[`${root}/overlay.yml`],args:['--no-open','--host','127.0.0.1','--port','0']})],{cwd:ws,env:runtimeEnvironment()},true)
- : startLoggedProcess(process.execPath,[...dshArgs,'--profile','web','--patch',`${root}/overlay.yml`,'--no-open','--host','127.0.0.1','--port','0'],{cwd:ws,env:runtimeEnvironment()});
+ ? startLoggedProcess(process.execPath,[...observerArgs,join(host,'scripts/profile-process.mjs'),JSON.stringify({profile:'web',patchFiles:[`${root}/overlay.yml`],args:['--no-open','--host','127.0.0.1','--port','0']})],{cwd:ws,env:observerEnvironment()},true)
+ : startLoggedProcess(process.execPath,[...observerArgs,...dshArgs,'--profile','web','--patch',`${root}/overlay.yml`,'--no-open','--host','127.0.0.1','--port','0'],{cwd:ws,env:observerEnvironment()});
 let proc=start();
 try {
  const launch=await waitForOutput(proc,/dsh web: (http:\/\/[^\s]+)/u,30000);
@@ -185,13 +210,36 @@ try {
  assert.doesNotMatch(JSON.stringify(result),/POLICY_SENTINEL_MUST_NOT_LEAK/);
  for(const id of ['outside','symlink','native_read'])assert.match(results.get(id).text,/SYNTHETIC_OUTSIDE/);
  assert.equal(createHash('sha256').update(await readFile(`${ws}/分镜.xlsx`)).digest('hex'),uploadDigest);
+ const readRecords=async name=>{try{return (await readFile(`${root}/${name}`,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}};
+ const waitUntil=async(check,label)=>{const end=Math.min(deadline,Date.now()+10000);do{const value=await check();if(value)return value;await new Promise(r=>setTimeout(r,10));}while(Date.now()<end);throw new Error(`Timed out: ${label}`);};
+ const cancellations=[];
+ for(const [turn,id] of [[2,'cancel_one'],[3,'cancel_two']]){
+  await rpc(base,'session/prompt',{requestId:randomUUID(),sessionId:session.sessionId,mode:'queue',content:[{type:'text',text:`Run ${id}.`}]});
+  await waitUntil(async()=>{const rows=(await readRecords('worker-lifetime.jsonl')).filter(row=>row.id===id);assert.ok(!rows.some(row=>row.type==='exit'),'parser must still be running before cancel');return rows.some(row=>row.type==='online');},`real ${id} Worker online`);
+  assert.deepEqual(await rpc(base,'session/cancel',{sessionId:session.sessionId}),{accepted:true});
+  result=await waitUntil(async()=>{const value=await history(base,session.sessionId);return value.events.some(e=>e.event.type==='turn/end'&&e.event.data.turn===turn)?value:false;},`${id} aborted turn`);
+  const end=result.events.find(e=>e.event.type==='turn/end'&&e.event.data.turn===turn).event.data.reason;
+  assert.deepEqual(end,{kind:'aborted',reason:{kind:'user'}});
+  const lifetime=assertInFlightCancellation(await readRecords('worker-lifetime.jsonl'),id);
+  const witness=(await readRecords('cancellation-results.jsonl')).filter(row=>row.id===id);
+  assert.equal(witness.length,1);assert.equal(witness[0].aborted,true);assert.equal(witness[0].isError,true);assert.equal(witness[0].code,'FS_ABORTED');assert.equal(witness[0].workerExited,true,'Worker must exit before final Tool result publication');
+  cancellations.push({id,lifetime,result:witness[0]});
+ }
+ await rpc(base,'session/prompt',{requestId:randomUUID(),sessionId:session.sessionId,mode:'queue',content:[{type:'text',text:'Read again after both cancellations.'}]});
+ result=await waitUntil(async()=>{const value=await history(base,session.sessionId);return value.events.some(e=>e.event.type==='turn/end'&&e.event.data.turn===4)?value:false;},'post-cancel recovery');
+ const recovery=result.events.find(e=>e.event.type==='tool/result'&&e.event.data.message.toolCallId==='after_cancel')?.event.data;
+ assert.equal(recovery?.message.isError,false);assert.equal(recovery.meta.lines[0].text,'alpha');assert.match(JSON.stringify(result),/CANCEL_RECOVERY_DONE/);
+ assert.equal(createHash('sha256').update(await readFile(`${ws}/cancel.docx`)).digest('hex'),cancelDigest);
+ await writeFile(`${root}/history.json`,JSON.stringify(result,null,2));
+ await writeFile(`${root}/cancellations.json`,JSON.stringify(cancellations,null,2));
+ const allEvents=result.events.filter(e=>e.event.type==='tool/result');assert.equal(allEvents.length,cases.length+3);
  await stopProcess(proc);
  proc=start();
  const coldLaunch=await waitForOutput(proc,/dsh web: (http:\/\/[^\s]+)/u,30000);
  const coldBase=await waitForHttpReady(coldLaunch,15000);
  const cold=await history(coldBase,session.sessionId);
- assert.deepEqual(cold.events.filter(e=>e.event.type==='tool/result'),events);
- const summary={artifactSha256:createHash('sha256').update(await readFile(artifact)).digest('hex'),hostVersion:dshPackage.version,sessionId:session.sessionId,toolCases:cases.length,toolCasesPassed:true,consumerAuditPassed:auditReview.rawAuditPassed,consumerAuditReviewPassed:auditPassed,withdrawnAuditFindings:auditReview.withdrawn,nativeUpload:true,foreignReceiptDenied:true,policyDenied:true,sourceUnchanged:true,currentDirectoryChanges:true,coldHistoryIdentical:true,results:[...results].map(([id,r])=>({id,isError:r.error,code:r.code}))};
+ assert.deepEqual(cold.events.filter(e=>e.event.type==='tool/result'),allEvents);
+ const summary={artifactSha256:createHash('sha256').update(await readFile(artifact)).digest('hex'),hostVersion:dshPackage.version,sessionId:session.sessionId,toolCases:cases.length,toolCasesPassed:true,profileCancellationQualified:true,cancellations,postCancellationRecovery:true,consumerAuditExitCode:auditExitCode,consumerAuditPassed:auditReview.rawAuditPassed,consumerAuditReviewPassed:auditPassed,withdrawnAuditFindings:auditReview.withdrawn,nativeUpload:true,foreignReceiptDenied:true,policyDenied:true,sourceUnchanged:true,currentDirectoryChanges:true,coldHistoryIdentical:true,results:[...results].map(([id,r])=>({id,isError:r.error,code:r.code}))};
  await writeFile(`${root}/summary.json`,JSON.stringify(summary,null,2));
  console.log(JSON.stringify(summary,null,2));
  assert.equal(auditPassed,true,'consumer dependency audit review must pass; unresolved findings are not waived by Tool evidence');
