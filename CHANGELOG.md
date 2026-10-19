@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5-vh.5.local.20261019.4 (unpublished local candidate)
+
+- Pins the DSH `0.2.1-rc.2.vh.1.local.20261019.4` family containing current-definition admission and Desktop resource preflight support.
+- Reader behavior and parser dependencies are unchanged. This package has its own lock and artifact identity; local.3 artifacts and qualification remain historical evidence.
+
 ## 0.5.5-vh.5.local.20261019.3 (unpublished local candidate)
 
 - Pins the complete DSH `0.2.1-rc.2.vh.1.local.20261019.3` family including strict inbound-codec fixes, using the reviewed build2 artifact identity.
