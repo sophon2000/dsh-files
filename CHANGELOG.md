@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5-vh.5.local.20261019.3 (unpublished local candidate)
+
+- Pins the complete DSH `0.2.1-rc.2.vh.1.local.20261019.3` family including strict inbound-codec fixes, using the reviewed build2 artifact identity.
+- Reader implementation and parser dependencies are unchanged. Previous local.2 artifacts remain immutable historical evidence; this candidate requires its own lock, checks and reproducible pack.
+
 ## 0.5.5-vh.5.local.20261018.2 (unpublished local candidate)
 
 - Pins the new DSH `0.2.1-rc.2.vh.1.local.20261018.2` family after the Host public declaration dependency fix; Reader runtime and parser dependencies remain unchanged.
