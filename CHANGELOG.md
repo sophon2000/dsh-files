@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5-vh.6.local.20261022.1 (unpublished local candidate)
+
+- Pins the complete DSH `0.2.1-rc.2.vh.2.local.20261022.1` family containing the Windows operation provider and recovery lifecycle fixes.
+- Reader execution and parser dependencies are unchanged. The preceding candidate remains immutable; this version has its own lock, build, tests and reproducible artifact identity.
+
 ## 0.5.5-vh.5.local.20261019.4 (unpublished local candidate)
 
 - Pins the DSH `0.2.1-rc.2.vh.1.local.20261019.4` family containing current-definition admission and Desktop resource preflight support.
