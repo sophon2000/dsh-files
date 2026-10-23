@@ -21,6 +21,10 @@ No `read_document`, detection or parser implementation changed upstream across t
 
 ## DSH rc.2 candidate compatibility
 
+`0.5.5-vh.11.local.20261023.1` is the independently produced Linux successor, with exact DSH pins to `0.2.1-rc.2.vh.6.local.20261023.2`. Its source baseline is `95faa135b00fe565323d985ad08cd65c9794506d`; the matching DSH source is `74a47fb27e48bfd43c2ae79772495b5cf47a9db8` (tree `48967b0e47332fe4ba4d2d3851cff76a136a21af`). It requires fresh native Linux build, checks, reproducible packs and installed Profile qualification. Parser code and third-party versions are unchanged. The unavailable Windows vh.10 archive is not an input, and its version or results are not reused for this new artifact.
+
+The vh.10 and vh.9 paragraphs below are historical candidate records, not qualification of vh.11.
+
 `0.5.5-vh.10.local.20261023.1` advances only the exact DSH pins to `0.2.1-rc.2.vh.6.local.20261023.1` for the native Windows development SDK. Its direct parent is `798ddb49abd3ba8826b1787a167aba6b7d98f252` (vh.9). The DSH source is `87cc76e8fd584e6501e9c940cfd3ecff58da363b` (tree `fa3656e0d51b186de3d599c54efc2e8c90f15af5`). Runtime extraction behavior, parser dependencies and the Windows binding-lifetime fix are unchanged. Earlier vh.9 evidence remains historical; fresh checks and reproducible packs must bind this candidate's own clean commit.
 
 `0.5.5-vh.9.local.20261023.1` adapts exact Host/vendor pins for the rc.2-based Video candidate. `ensureForExecution(exec)` remains mandatory: the Host authorizer and Reader must resolve the same validated directory for one execution, including cancellation and directory-change races. Do not replace it with a session header or a fresh mutable cwd read. Parser dependencies, read budgets, Worker termination and the no-op client remain unchanged.
@@ -79,7 +83,7 @@ Release gates:
 3. production-only audit review
 4. two packs with matching SHA-256 in the same toolchain
 5. tarball allowlist inspection: no attachment-loop/client UI modules
-6. install into a fresh DSH `0.2.1-rc.2.vh.6.local.20261023.1` profile
+6. install into a fresh DSH `0.2.1-rc.2.vh.6.local.20261023.2` profile
 7. real tool calls for text, PDF, DOC, DOCX, XLSX, paging, cancellation, invalid arguments and current working-directory changes
 
 The current production audit reports one moderate advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), in the retained `mammoth > argparse > sprintf-js@1.0.3` chain. The [official CVE record](https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/97xxx/CVE-2026-97058.json) marks its `CVE-2026-97058` identity REJECTED by the CNA on 2026-10-12; the GitHub/npm audit data had not synchronized at the 2026-10-18 observation. npm still publishes latest `1.1.3`, with no `1.1.4` release, so the audit's patched range is not an available upgrade.
