@@ -2,15 +2,15 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.10.local.20261023.1` (local candidate, unpublished)
+- Version: `0.5.5-vh.11.local.20261024.1` (local candidate, unpublished)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.1-rc.2.vh.6.local.20261023.1`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Candidate host: DSH `0.2.1-rc.2.vh.7.local.20261024.1`, Cordis `4.0.5`, Schemastery `3.18.5`
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; this candidate has not been published
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
 - Integration: two-parent merge of that fork parent and the exact original-upstream commit above
 - Shared upstream ancestor: `8f2d0bdf874b3e30ff19b40ab3f19a8a50e168a0` (`0.5.3`)
-- Previous candidate parent: `a8cfa6f52022e3f7f0771bfb79d16902eb343db8` (`0.5.5-vh.8.local.20261022.1`); its immutable tarball and qualification evidence are preserved. The earlier vh.4 archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
+- Historical candidate parent: `a8cfa6f52022e3f7f0771bfb79d16902eb343db8` (`0.5.5-vh.8.local.20261022.1`); its immutable tarball and qualification evidence are preserved. The earlier vh.4 archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
 - Local candidate dependencies: clean DSH rc.2-based candidate tarballs, served by an explicitly configured local registry; exact versions and artifact integrity must be locked before qualification, with no assumed release URLs
 
 ## Upstream 0.5.5 reconciliation
@@ -20,6 +20,8 @@ The five original-upstream commits after `0.5.3` were fetched and merged with ac
 No `read_document`, detection or parser implementation changed upstream across those five commits, so the bounded fork implementations are retained byte-for-byte. See [the reconciliation record](docs/upstream-0.5.5-reconciliation.md) for commit and file decisions. Upstream desktop claims and its 100-test result are historical upstream evidence, not tests of this fork.
 
 ## DSH rc.2 candidate compatibility
+
+`0.5.5-vh.11.local.20261024.1` advances only the exact DSH pins to `0.2.1-rc.2.vh.7.local.20261024.1` for the Codex context-overflow correction. Its direct parent is `5be27da5b330374b382a41698962c6ce21ae37a7` (vh.10). The DSH source is `5b9faba442bebe71128cf176fdc9e728e2f02f3d`. Document extraction, parser dependencies and the Windows binding-lifetime fix are unchanged. The new artifact manifest must bind the actual supplied DSH candidate and this Reader candidate's clean commit. Prior validation results remain historical; this version requires its own install, checks and reproducible packs.
 
 `0.5.5-vh.10.local.20261023.1` advances only the exact DSH pins to `0.2.1-rc.2.vh.6.local.20261023.1` for the native Windows development SDK. Its direct parent is `798ddb49abd3ba8826b1787a167aba6b7d98f252` (vh.9). The DSH source is `87cc76e8fd584e6501e9c940cfd3ecff58da363b` (tree `fa3656e0d51b186de3d599c54efc2e8c90f15af5`). Runtime extraction behavior, parser dependencies and the Windows binding-lifetime fix are unchanged. Earlier vh.9 evidence remains historical; fresh checks and reproducible packs must bind this candidate's own clean commit.
 
@@ -79,7 +81,7 @@ Release gates:
 3. production-only audit review
 4. two packs with matching SHA-256 in the same toolchain
 5. tarball allowlist inspection: no attachment-loop/client UI modules
-6. install into a fresh DSH `0.2.1-rc.2.vh.5.local.20261023.2` profile
+6. install into a fresh DSH `0.2.1-rc.2.vh.7.local.20261024.1` profile
 7. real tool calls for text, PDF, DOC, DOCX, XLSX, paging, cancellation, invalid arguments and current working-directory changes
 
 The current production audit reports one moderate advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), in the retained `mammoth > argparse > sprintf-js@1.0.3` chain. The [official CVE record](https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/97xxx/CVE-2026-97058.json) marks its `CVE-2026-97058` identity REJECTED by the CNA on 2026-10-12; the GitHub/npm audit data had not synchronized at the 2026-10-18 observation. npm still publishes latest `1.1.3`, with no `1.1.4` release, so the audit's patched range is not an available upgrade.

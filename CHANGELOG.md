@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5-vh.11.local.20261024.1 (unpublished local candidate)
+
+- Pins the DSH `0.2.1-rc.2.vh.7.local.20261024.1` family containing the Codex context-overflow correction.
+- Reader runtime behavior and parser dependencies are unchanged from vh.10. This candidate requires its own lock, checks and reproducible artifact identity; earlier validation is not reused as current evidence.
+
 ## 0.5.5-vh.6.local.20261022.1 (unpublished local candidate)
 
 - Pins the complete DSH `0.2.1-rc.2.vh.2.local.20261022.1` family containing the Windows operation provider and recovery lifecycle fixes.
