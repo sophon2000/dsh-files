@@ -79,7 +79,7 @@ Release gates:
 3. production-only audit review
 4. two packs with matching SHA-256 in the same toolchain
 5. tarball allowlist inspection: no attachment-loop/client UI modules
-6. install into a fresh DSH `0.2.1-rc.2.vh.5.local.20261023.2` profile
+6. install into a fresh DSH `0.2.1-rc.2.vh.6.local.20261023.1` profile
 7. real tool calls for text, PDF, DOC, DOCX, XLSX, paging, cancellation, invalid arguments and current working-directory changes
 
 The current production audit reports one moderate advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), in the retained `mammoth > argparse > sprintf-js@1.0.3` chain. The [official CVE record](https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/97xxx/CVE-2026-97058.json) marks its `CVE-2026-97058` identity REJECTED by the CNA on 2026-10-12; the GitHub/npm audit data had not synchronized at the 2026-10-18 observation. npm still publishes latest `1.1.3`, with no `1.1.4` release, so the audit's patched range is not an available upgrade.
