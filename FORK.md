@@ -2,15 +2,15 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.9.local.20261023.1` (local candidate, unpublished)
+- Version: `0.5.5-vh.10.local.20261023.1` (local candidate, unpublished)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.1-rc.2.vh.5.local.20261023.2`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Candidate host: DSH `0.2.1-rc.2.vh.6.local.20261023.1`, Cordis `4.0.5`, Schemastery `3.18.5`
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; this candidate has not been published
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
 - Integration: two-parent merge of that fork parent and the exact original-upstream commit above
 - Shared upstream ancestor: `8f2d0bdf874b3e30ff19b40ab3f19a8a50e168a0` (`0.5.3`)
-- Current candidate parent: `a8cfa6f52022e3f7f0771bfb79d16902eb343db8` (`0.5.5-vh.8.local.20261022.1`); its immutable tarball and qualification evidence are preserved. The earlier vh.4 archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
+- Previous candidate parent: `a8cfa6f52022e3f7f0771bfb79d16902eb343db8` (`0.5.5-vh.8.local.20261022.1`); its immutable tarball and qualification evidence are preserved. The earlier vh.4 archive remains bound to `2be7701e394eaeda95ee8f8c1f24c001bdeb2de3`. No Reader upstream refresh.
 - Local candidate dependencies: clean DSH rc.2-based candidate tarballs, served by an explicitly configured local registry; exact versions and artifact integrity must be locked before qualification, with no assumed release URLs
 
 ## Upstream 0.5.5 reconciliation
@@ -20,6 +20,8 @@ The five original-upstream commits after `0.5.3` were fetched and merged with ac
 No `read_document`, detection or parser implementation changed upstream across those five commits, so the bounded fork implementations are retained byte-for-byte. See [the reconciliation record](docs/upstream-0.5.5-reconciliation.md) for commit and file decisions. Upstream desktop claims and its 100-test result are historical upstream evidence, not tests of this fork.
 
 ## DSH rc.2 candidate compatibility
+
+`0.5.5-vh.10.local.20261023.1` advances only the exact DSH pins to `0.2.1-rc.2.vh.6.local.20261023.1` for the native Windows development SDK. Its direct parent is `798ddb49abd3ba8826b1787a167aba6b7d98f252` (vh.9). The DSH source is `87cc76e8fd584e6501e9c940cfd3ecff58da363b` (tree `fa3656e0d51b186de3d599c54efc2e8c90f15af5`). Runtime extraction behavior, parser dependencies and the Windows binding-lifetime fix are unchanged. Earlier vh.9 evidence remains historical; fresh checks and reproducible packs must bind this candidate's own clean commit.
 
 `0.5.5-vh.9.local.20261023.1` adapts exact Host/vendor pins for the rc.2-based Video candidate. `ensureForExecution(exec)` remains mandatory: the Host authorizer and Reader must resolve the same validated directory for one execution, including cancellation and directory-change races. Do not replace it with a session header or a fresh mutable cwd read. Parser dependencies, read budgets, Worker termination and the no-op client remain unchanged.
 
