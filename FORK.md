@@ -2,10 +2,11 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.10.local.20261023.1` (local candidate, unpublished)
+- Version: `0.5.5-vh.11.local.20261023.1` (local candidate, unpublished)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.1-rc.2.vh.6.local.20261023.1`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Candidate host: DSH `0.2.1-rc.2.vh.6.local.20261023.2`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Qualified local tarball: built from `0f93e311bfc679bee3fbc8a1a31e842a35d2b7b0`, SHA-256 `0690f6fcf22577aece76b1c68de18dcc6c76b7f8c6d2c642c6f85b7cf258312c`. This later documentation correction does not rebuild or relabel those bytes.
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; this candidate has not been published
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
 - Integration: two-parent merge of that fork parent and the exact original-upstream commit above
