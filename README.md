@@ -2,7 +2,7 @@
 
 `dsh-files` adds one model-facing capability to DeepSeek Harness: bounded structured-text extraction for documents that the native text reader cannot parse.
 
-This **unpublished local candidate `0.5.5-vh.11.local.20261023.1`** targets **DSH `0.2.1-rc.2.vh.6.local.20261023.2`**. Its dependencies are pinned to the matching local candidate package family; qualification results are recorded separately. No release URL is assigned to this candidate. Published builds use versioned assets from the [fork releases](https://github.com/sophon2000/dsh-files/releases); the unrelated npm package name is not a distribution channel for this build.
+This **unpublished local candidate `0.5.5-vh.12.local.20261024.1`** targets **DSH `0.2.1-rc.2.vh.8.local.20261024.1`**. Its dependencies are pinned to the matching local candidate package family; qualification results are recorded separately. No release URL is assigned to this candidate. Published builds use versioned assets from the [fork releases](https://github.com/sophon2000/dsh-files/releases); the unrelated npm package name is not a distribution channel for this build.
 
 ## Capability boundary
 
