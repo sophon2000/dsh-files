@@ -2,7 +2,7 @@
 
 `dsh-files` 只给 DeepSeek Harness 增加一种模型能力：对原生文本读取器无法解析的文档做有边界的结构化文字提取。
 
-当前 **`0.5.5-vh.14.local.20261025.1` 是开发候选版**，目标宿主为 **DSH `0.2.1-rc.2.vh.10.local.20261025.2`**，依赖精确固定到配套本地候选包，验证结果单独记录。固定归档与收据通过精确的 Video 候选套件及 [fork Releases](https://github.com/sophon2000/dsh-files/releases) 中带版本和摘要的资产分发；同名 npm 包不是本版本的分发渠道。
+当前 **`0.5.5-vh.15.local.20261026.1` 是开发候选版**，目标宿主为 **DSH `0.2.1-rc.2.vh.11.local.20261026.1`**，依赖精确固定到配套本地候选包，验证结果单独记录。固定归档与收据通过精确的 Video 候选套件及 [fork Releases](https://github.com/sophon2000/dsh-files/releases) 中带版本和摘要的资产分发；同名 npm 包不是本版本的分发渠道。
 
 ## 能力边界
 
