@@ -2,12 +2,12 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.12.local.20261024.1` (local candidate, unpublished)
+- Version: `0.5.5-vh.13.local.20261025.1` (development candidate; not a production qualification)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.1-rc.2.vh.8.local.20261024.1`, Cordis `4.0.5`, Schemastery `3.18.5`
-- Historical vh.11 qualified local tarball: built from `0f93e311bfc679bee3fbc8a1a31e842a35d2b7b0`, SHA-256 `0690f6fcf22577aece76b1c68de18dcc6c76b7f8c6d2c642c6f85b7cf258312c`. Those sealed bytes are preserved; they do not qualify the new vh.12 candidate.
-- Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases only; this candidate has not been published
+- Candidate host: DSH `0.2.1-rc.2.vh.9.local.20261025.1`, Cordis `4.0.5`, Schemastery `3.18.5`
+- Historical vh.11 qualified local tarball: built from `0f93e311bfc679bee3fbc8a1a31e842a35d2b7b0`, SHA-256 `0690f6fcf22577aece76b1c68de18dcc6c76b7f8c6d2c642c6f85b7cf258312c`. Those sealed bytes are preserved; they do not qualify the new vh.13 candidate.
+- Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases and the exact Video candidate kit; no npm publication
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
 - Integration: two-parent merge of that fork parent and the exact original-upstream commit above
 - Shared upstream ancestor: `8f2d0bdf874b3e30ff19b40ab3f19a8a50e168a0` (`0.5.3`)
@@ -22,7 +22,7 @@ No `read_document`, detection or parser implementation changed upstream across t
 
 ## DSH rc.2 candidate compatibility
 
-`0.5.5-vh.12.local.20261024.1` is the new Linux chooser SDK candidate based on Reader `348c628bfbec1ce24baf30378ad22fede8744157`. All DSH dependencies target `0.2.1-rc.2.vh.8.local.20261024.1`, built from clean SDK source `a651ce4edf37f3ae8e9ff337c184a4580a18a577` (tree `b0b9189a72ee77579ccabbb4cb01e4f20bc46f68`). Parser/runtime behavior and third-party pins remain unchanged. Fresh check, reproducible packing and paired installed Profile evidence must bind this candidate's own actual clean source. No prior Linux or Windows artifact is relabeled.
+`0.5.5-vh.13.local.20261025.1` follows the vh8-based Codex context fix, based on Reader `e7cbaf41fa0094277d0f80ff4aa450056cc88fb9`. All DSH dependencies target `0.2.1-rc.2.vh.9.local.20261025.1`, built from clean SDK source `523310f7f46d0de8b078dcd36ffeedc8dfb92d0a`. Parser/runtime behavior and third-party pins remain unchanged. Mac checks and reproducible packing are recorded separately from native Linux/Windows qualification. No earlier platform artifact is relabeled.
 
 The following vh.11/vh.10/vh.9 paragraphs are historical, not evidence for vh.12.
 
@@ -88,7 +88,7 @@ Release gates:
 3. production-only audit review
 4. two packs with matching SHA-256 in the same toolchain
 5. tarball allowlist inspection: no attachment-loop/client UI modules
-6. install into a fresh DSH `0.2.1-rc.2.vh.8.local.20261024.1` profile
+6. install into a fresh DSH `0.2.1-rc.2.vh.9.local.20261025.1` profile
 7. real tool calls for text, PDF, DOC, DOCX, XLSX, paging, cancellation, invalid arguments and current working-directory changes
 
 The historical 2026-10-18 production audit reported one moderate advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), in the retained `mammoth > argparse > sprintf-js@1.0.3` chain. The [official CVE record](https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/97xxx/CVE-2026-97058.json) marks its `CVE-2026-97058` identity REJECTED by the CNA on 2026-10-12; the GitHub/npm audit data had not synchronized at the 2026-10-18 observation. npm still publishes latest `1.1.3`, with no `1.1.4` release, so the audit's patched range is not an available upgrade.
