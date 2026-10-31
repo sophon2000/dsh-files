@@ -2,10 +2,10 @@
 
 ## Release identity
 
-- Version: `0.5.5-vh.16.local.20261031.1` (development candidate; not a production qualification)
+- Version: `0.5.5-vh.17.local.20261031.1` (development candidate; not a production qualification)
 - Original upstream: [`taxueseek/dsh-files`](https://github.com/taxueseek/dsh-files), `0.5.5` at `10d6bf12221ef4d131cc5e66eb8553e84df2c3c9`
 - Upstream tree: `a6d471b41302fef9da9290902fd9fafc7d1b8715`
-- Candidate host: DSH `0.2.2-alpha.2.vh.1.local.20261031.1`, Cordis `4.0.6-alpha.1`, Schemastery `3.18.6-alpha.1`
+- Candidate host: DSH `0.2.2-alpha.2.vh.2.local.20261031.1`, Cordis `4.0.6-alpha.1`, Schemastery `3.18.6-alpha.1`
 - Historical vh.11 qualified local tarball: built from `0f93e311bfc679bee3fbc8a1a31e842a35d2b7b0`, SHA-256 `0690f6fcf22577aece76b1c68de18dcc6c76b7f8c6d2c642c6f85b7cf258312c`. Those sealed bytes are preserved; they do not qualify the new vh.14 candidate.
 - Distribution policy: versioned assets from `sophon2000/dsh-files` GitHub Releases and the exact Video candidate kit; no npm publication
 - Preserved fork parent: `61eb268a3451d6c60889264ea3009123ccd3214d` (`0.5.3-vh.3`)
@@ -20,7 +20,30 @@ The five original-upstream commits after `0.5.3` were fetched and merged with ac
 
 No `read_document`, detection or parser implementation changed upstream across those five commits, so the bounded fork implementations are retained byte-for-byte. See [the reconciliation record](docs/upstream-0.5.5-reconciliation.md) for commit and file decisions. Upstream desktop claims and its 100-test result are historical upstream evidence, not tests of this fork.
 
-## DSH master candidate compatibility
+## DSH master vh.2 candidate compatibility
+
+`0.5.5-vh.17.local.20261031.1` advances the exact Host pins from Reader source
+`3c600e16d5c23543c3e0ce67e81944118195d496` to DSH
+`0.2.2-alpha.2.vh.2.local.20261031.1`, source
+`17eeb2094fea6e08067fdfd3ab34c3b44c4fdead` (tree
+`59d7fccf4fdfabdbfcb9e0a8411ecc882f3bcded`). That Host corrects native file
+tool execution-directory binding. Reader continues to pass the original execution
+to `ensureForExecution(exec)`; parser code, worker lifetime, third-party pins and
+the native DSH ownership of attachment UI remain unchanged. This is a new
+immutable candidate requiring its own dependency lock, build, tests and archive
+receipts. The earlier vh.16 archive and its evidence are preserved.
+
+The lock resolves all 27 Host/vendor packages against manifest SHA-256
+`a67b211db222696ec2811a024b8c0abb88984e5c9eb327477ed29e6a93ae6c77`.
+Their versions and integrity match that H source manifest. All 94 public package
+identities and integrity values are unchanged. Release-age exceptions contain
+only its 387 exact package/version pairs; strict checks remain enabled.
+The native Mac frozen install, build, typecheck and original source suite passed
+with 79 tests and four Windows-only skips. The production dependency audit found
+zero vulnerabilities. These source observations do not qualify a platform runtime
+or consumer Profile; archive and actual installed-Host checks need their own receipts.
+
+## Historical DSH master vh.1 compatibility
 
 `0.5.5-vh.16.local.20261031.1` binds the existing Reader implementation to DSH `0.2.2-alpha.2.vh.1.local.20261031.1`, based on official master `ce7073d51254c26cd63b22a60835b8f948deb447`. Cordis and Schemastery follow that host's exact vendor versions. The prior Reader source is `01cab4dc8747e2a10116b67d5b4bdfe26685db87`; parser code, execution-directory binding, native worker lifetime and third-party parser dependencies are unchanged. The final DSH fork source and artifact hashes must come from the supplied manifest, not the official base alone. No older build, audit or Profile qualification is inherited.
 
