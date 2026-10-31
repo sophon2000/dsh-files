@@ -24,7 +24,9 @@ No `read_document`, detection or parser implementation changed upstream across t
 
 `0.5.5-vh.16.local.20261031.1` binds the existing Reader implementation to DSH `0.2.2-alpha.2.vh.1.local.20261031.1`, based on official master `ce7073d51254c26cd63b22a60835b8f948deb447`. Cordis and Schemastery follow that host's exact vendor versions. The prior Reader source is `01cab4dc8747e2a10116b67d5b4bdfe26685db87`; parser code, execution-directory binding, native worker lifetime and third-party parser dependencies are unchanged. The final DSH fork source and artifact hashes must come from the supplied manifest, not the official base alone. No older build, audit or Profile qualification is inherited.
 
-The new lock, clean build, checks, reproducible archive and fresh Profile qualification remain required. This record does not claim they have run.
+The dependency lock was regenerated from the verified artifact manifest with SHA-256 `74194986c3bb60fa62e7819772512c9cfd62203da9f224b46fb9e0b5e64b7c58`, whose DSH source is `3400c4a11043fbd0ab486561edc23d6309f41463` (tree `6295973ce333b70adf3c833c99131bb04e16fd2d`). All 27 locked Host/vendor packages match that manifest's exact version and integrity. The 387 release-age exceptions enumerate only its exact package/version pairs; strict age checking remains enabled for other inputs. All non-DSH dependency identities and integrity hashes are unchanged.
+
+The native Mac source check on 2026-10-31 completed a fresh frozen install with lifecycle scripts ignored, build, typecheck and 79 passing tests; four Windows-only tests were skipped. The production dependency audit returned zero findings. Reproducible archives and fresh Profile qualification require their own receipts bound to the final clean source; no earlier qualification is inherited.
 
 ## DSH rc.2 candidate compatibility
 
