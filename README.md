@@ -2,7 +2,7 @@
 
 `dsh-files` adds one model-facing capability to DeepSeek Harness: bounded structured-text extraction for documents that the native text reader cannot parse.
 
-This **development candidate `0.5.5-vh.15.local.20261026.1`** targets **DSH `0.2.1-rc.2.vh.11.local.20261026.1`**. Its dependencies are pinned to the matching local candidate package family; qualification results are recorded separately. Fixed archives and receipts are distributed through the [fork releases](https://github.com/sophon2000/dsh-files/releases) and the pinned Video candidate kit; the unrelated npm package name is not a distribution channel for this build.
+This **development candidate `0.5.5-vh.16.local.20261031.1`** targets **DSH `0.2.2-alpha.2.vh.1.local.20261031.1`**. Its dependencies are pinned to the matching local candidate package family; qualification results are recorded separately. Fixed archives and receipts are distributed through the [fork releases](https://github.com/sophon2000/dsh-files/releases) and the pinned Video candidate kit; the unrelated npm package name is not a distribution channel for this build.
 
 ## Capability boundary
 
@@ -14,7 +14,7 @@ This **development candidate `0.5.5-vh.15.local.20261026.1`** targets **DSH `0.2
 - Does not register an attachment library, folder uploader, export route, `@` source, custom upload path or business-document binding.
 - Ships a no-op client module solely for the DSH package handoff; it injects no client services and renders nothing.
 
-This fork merges original upstream [0.5.5 at `10d6bf1`](https://github.com/taxueseek/dsh-files/commit/10d6bf12221ef4d131cc5e66eb8553e84df2c3c9) with the bounded Video Harness reader. Upstream SDK alignment is adapted to the exact rc.2-based fork family; its attachment routes, dock and `@` diagnostics remain outside this artifact because DSH and Video Harness Catalog own those surfaces. The extraction implementation did not change upstream between 0.5.3 and 0.5.5.
+This fork merges original upstream [0.5.5 at `10d6bf1`](https://github.com/taxueseek/dsh-files/commit/10d6bf12221ef4d131cc5e66eb8553e84df2c3c9) with the bounded Video Harness reader. Upstream SDK alignment is adapted to the exact master-based fork family; its attachment routes, dock and `@` diagnostics remain outside this artifact because DSH and Video Harness Catalog own those surfaces. The extraction implementation did not change upstream between 0.5.3 and 0.5.5.
 
 Native document preview helps people view a file. `read_document` extracts its text for the model, including paging and sheet selection. Those are different capabilities. See [FORK.md](FORK.md) for the recorded merge and retained scope.
 
